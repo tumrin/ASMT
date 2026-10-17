@@ -1,0 +1,36 @@
+/* Palette sampled from the design mock-up (Material 3 baseline colours). */
+:root {
+	--color-primary: #6750a4;
+	--color-background: #fef7ff;
+	--color-surface: #ffffff;
+	--color-surface-variant: #f5f4f6;
+	--color-on-surface: #1d1b20;
+	--color-on-surface-variant: #39373c;
+	--color-muted: #717073;
+	--color-outline: #c6c6c7;
+	--color-outline-variant: #e3e3e3;
+	--color-error-container: #f9dedc;
+	--color-on-error-container: #852221;
+
+	/* Antibiogram traffic lights; on-* is the text/icon colour on top. */
+	--color-traffic-green: #adffa3;
+	--color-on-traffic-green: #162014;
+	--color-traffic-yellow: #ffd8a3;
+	--color-on-traffic-yellow: #563d00;
+	--color-traffic-red: var(--color-error-container);
+	--color-on-traffic-red: var(--color-on-error-container);
+	--color-traffic-none: var(--color-outline-variant);
+
+	--font-sans: 'Google Sans Flex', system-ui, sans-serif;
+}
+
+body {
+	margin: 0;
+	background: var(--color-background);
+	color: var(--color-on-surface);
+	font-family: var(--font-sans);
+}
+
+a {
+	color: var(--color-primary);
+}
