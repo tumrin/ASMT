@@ -1,4 +1,4 @@
-// Response shape of GET /antibiogram (server/packages/api/src/resistance_api/responses.py).
+// Response shape of GET /antibiogram (server/src/resistance/api/responses.py).
 
 import type { TrafficLight } from './trafficlight.js';
 
@@ -11,8 +11,6 @@ export interface AntibioticCell {
 	n: number;
 	n_s: number;
 	susceptibility_rate: number | null;
-	ci_low: number | null;
-	ci_high: number | null;
 	traffic_light: TrafficLight;
 }
 

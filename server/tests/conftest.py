@@ -5,8 +5,9 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from resistance_analysis.config import Settings
-from resistance_analysis.load import SCHEMAS
+
+from resistance.config import Settings
+from resistance.load import SCHEMAS
 
 
 def small_frames() -> dict[str, pl.DataFrame]:

@@ -36,11 +36,8 @@ def build_contexts(ds: Dataset) -> pl.DataFrame:
 
 
 def build_analytics(ds: Dataset, contexts: pl.DataFrame) -> pl.DataFrame:
-    """Isolate-level frame with patient and culture context."""
-    patients = ds.patients.select("patient_id", "sex", "birth_year", "home_area")
-    return ds.isolates.join(contexts, on="culture_id", how="left").join(
-        patients, on="patient_id", how="left"
-    )
+    """Isolate-level frame with culture context."""
+    return ds.isolates.join(contexts, on="culture_id", how="left")
 
 
 def build_susceptibility_analytics(ds: Dataset, contexts: pl.DataFrame) -> pl.DataFrame:

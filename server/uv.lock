@@ -2,24 +2,6 @@ version = 1
 revision = 5
 requires-python = ">=3.12"
 
-[manifest]
-members = [
-    "resistance-analysis",
-    "resistance-api",
-    "resistance-core",
-    "resistance-workspace",
-]
-constraints = [
-    { name = "fastapi", specifier = ">=0.143.3" },
-    { name = "httpx2", specifier = ">=2.13.1" },
-    { name = "polars", specifier = ">=2.0.0" },
-    { name = "pydantic", specifier = ">=2.14.1" },
-    { name = "pytest", specifier = ">=9.1.1" },
-    { name = "ruff", specifier = ">=0.17.1" },
-    { name = "ty", specifier = ">=0.0.89" },
-    { name = "uvicorn", specifier = ">=0.54.0" },
-]
-
 [[package]]
 name = "annotated-doc"
 version = "0.0.5"
@@ -357,71 +339,36 @@ wheels = [
 ]
 
 [[package]]
-name = "resistance-analysis"
+name = "resistance"
 version = "0.1.0"
-source = { editable = "packages/analysis" }
-dependencies = [
-    { name = "polars" },
-    { name = "resistance-core" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "polars" },
-    { name = "resistance-core", editable = "packages/core" },
-]
-
-[[package]]
-name = "resistance-api"
-version = "0.1.0"
-source = { editable = "packages/api" }
+source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "polars" },
     { name = "pydantic" },
     { name = "uvicorn" },
 ]
-
-[package.metadata]
-requires-dist = [
-    { name = "fastapi" },
-    { name = "pydantic" },
-    { name = "uvicorn" },
-]
-
-[[package]]
-name = "resistance-core"
-version = "0.1.0"
-source = { editable = "packages/core" }
-dependencies = [
-    { name = "polars" },
-]
-
-[package.metadata]
-requires-dist = [{ name = "polars" }]
-
-[[package]]
-name = "resistance-workspace"
-version = "0.1.0"
-source = { virtual = "." }
 
 [package.dev-dependencies]
 dev = [
     { name = "httpx2" },
     { name = "pytest" },
-    { name = "resistance-analysis" },
-    { name = "resistance-api" },
     { name = "ruff" },
     { name = "ty" },
 ]
 
 [package.metadata]
+requires-dist = [
+    { name = "fastapi" },
+    { name = "polars" },
+    { name = "pydantic" },
+    { name = "uvicorn" },
+]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "httpx2" },
     { name = "pytest" },
-    { name = "resistance-analysis", editable = "packages/analysis" },
-    { name = "resistance-api", editable = "packages/api" },
     { name = "ruff" },
     { name = "ty" },
 ]

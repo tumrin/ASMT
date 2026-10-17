@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from contextlib import asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
@@ -135,16 +136,26 @@ def _patient_history(
     return rows[:limit]
 
 
-def _ward_counts(doc: dict[str, Any], ward_code: str) -> dict[str, int]:
-    patients = cultures = isolates = 0
+def _patient_ward_pairs(
+    doc: dict[str, Any], ward_code: str
+) -> Iterator[tuple[dict[str, Any], dict[str, Any]]]:
     for patient in doc.get("patients", {}).values():
         ward = patient.get("wards", {}).get(ward_code)
-        if ward is None:
-            continue
-        patients += 1
-        cultures += len(ward.get("cultures", []))
-        isolates += sum(len(culture["isolates"]) for culture in ward["cultures"])
-    return {"patients": patients, "cultures": cultures, "isolates": isolates}
+        if ward is not None:
+            yield patient, ward
+
+
+def _ward_counts(doc: dict[str, Any], ward_code: str) -> dict[str, int]:
+    pairs = list(_patient_ward_pairs(doc, ward_code))
+    return {
+        "patients": len(pairs),
+        "cultures": sum(len(ward["cultures"]) for _, ward in pairs),
+        "isolates": sum(
+            len(culture["isolates"])
+            for _, ward in pairs
+            for culture in ward["cultures"]
+        ),
+    }
 
 
 def _default_period(periods: list[str]) -> str:
@@ -354,23 +365,17 @@ def create_app(dataset_path: str | Path) -> FastAPI:
     def get_ward_patients(
         ward_code: str = PathParam(description="Ward identifier."),
     ) -> dict[str, object]:
-        rows = []
-        for patient in app.state.doc["patients"].values():
-            ward = patient["wards"].get(ward_code)
-            if ward is None:
-                continue
-            rows.append(
-                {
-                    "patient_id": patient["patient_id"],
-                    "sex": patient["sex"],
-                    "birth_year": patient["birth_year"],
-                    "home_area": patient["home_area"],
-                    "n_cultures": len(ward["cultures"]),
-                    "n_isolates": sum(
-                        len(culture["isolates"]) for culture in ward["cultures"]
-                    ),
-                }
-            )
+        rows = [
+            {
+                "patient_id": patient["patient_id"],
+                "sex": patient["sex"],
+                "birth_year": patient["birth_year"],
+                "home_area": patient["home_area"],
+                "n_cultures": len(ward["cultures"]),
+                "n_isolates": sum(len(c["isolates"]) for c in ward["cultures"]),
+            }
+            for patient, ward in _patient_ward_pairs(app.state.doc, ward_code)
+        ]
         rows.sort(key=lambda row: row["patient_id"])
         return {"ward_code": ward_code, "n_patients": len(rows), "patients": rows}
 

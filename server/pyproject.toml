@@ -1,39 +1,30 @@
 [project]
-name = "resistance-workspace"
+name = "resistance"
 version = "0.1.0"
-description = "Workspace root for the resistance analysis pipeline and API."
+description = "Cumulative-antibiogram analysis pipeline and API over the synthetic microbiology dataset."
 requires-python = ">=3.12"
-
-[tool.uv]
-package = false
-constraint-dependencies = [
-    "fastapi>=0.143.3",
-    "httpx2>=2.13.1",
-    "polars>=2.0.0",
-    "pydantic>=2.14.1",
-    "pytest>=9.1.1",
-    "ruff>=0.17.1",
-    "ty>=0.0.89",
-    "uvicorn>=0.54.0",
+dependencies = [
+    "fastapi",
+    "polars",
+    "pydantic",
+    "uvicorn",
 ]
 
-[tool.uv.workspace]
-members = ["packages/*"]
+[project.scripts]
+resistance-analysis = "resistance.cli:analysis_main"
+resistance-api = "resistance.cli:api_main"
 
 [dependency-groups]
 dev = [
     "httpx2",
     "pytest",
-    "resistance-analysis",
-    "resistance-api",
     "ruff",
     "ty",
 ]
 
-[tool.uv.sources]
-resistance-analysis = { workspace = true }
-resistance-api = { workspace = true }
-resistance-core = { workspace = true }
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

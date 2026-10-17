@@ -4,8 +4,9 @@ from datetime import date
 from typing import Any
 
 import polars as pl
-from resistance_analysis.antibiogram import _entry, _traffic_light, build_antibiogram
-from resistance_analysis.config import Settings
+
+from resistance.antibiogram import _entry, _traffic_light, build_antibiogram
+from resistance.config import Settings
 
 
 def _frames(
