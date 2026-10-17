@@ -38,12 +38,18 @@ liirum laarum
 
 ### Interviews with Healthcare Professionals
 
-Currently our understanding of the situation is based on couple of sources: 
+Currently our understanding of the situation is quite limited, which leads to making assumptions about what the users require. Our current information is based on couple of sources: 
 - Information that the challenge gives 
 - One interview with a healthcare professional
-- Our limited learning from internet. 
+- Our limited learning from the internet. 
 
+To better fit the needs of the users --- and to fact check our information --- we need to ask them directly:
+- How do they currently decide which antibiotic to give the patient?
+- What kind of information is available to them to support their decision?
+- What kind of data would be important to them from our software?
+- What kind of software they are used to using?
 
+Interviewing them at their usual workplace would allow us to understand the current system much better than what passed on information gives.
 
 ### Automatic antimicrobial susceptibility profile for patients
 
