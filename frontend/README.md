@@ -49,9 +49,9 @@ cp .env.example .env.development   # npm run dev
 cp .env.example .env.production    # npm run build / npm run preview
 ```
 
-| Variable | Required | Example | Description |
-|---|---|---|---|
-| `API_URL` | yes | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
+| Variable  | Required | Example                 | Description                                   |
+| --------- | -------- | ----------------------- | --------------------------------------------- |
+| `API_URL` | yes      | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
 
 `API_URL` is only read by `vite.config.ts` (via `loadEnv`), so it never reaches
 browser code. `.env.example` is committed; every other `.env*` file is gitignored.
@@ -90,7 +90,7 @@ moved from `spec.md`.
 ### Antibiogram (spec.md §3.2)
 
 - A matrix of organisms (rows) × antibiotics (columns). Each row is one
-  organism × specimen type pair, so *E. coli* (urine) and *E. coli* (blood) are
+  organism × specimen type pair, so _E. coli_ (urine) and _E. coli_ (blood) are
   separate rows.
 - Controls for scope (`hospital`, `ward` for inpatient units, `region` for outpatient
   `home_area`), period (`annual:<year>`, `last4w`) and an optional organism filter.

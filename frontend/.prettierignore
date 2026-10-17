@@ -1,0 +1,5 @@
+package-lock.json
+.svelte-kit
+build
+node_modules
+static

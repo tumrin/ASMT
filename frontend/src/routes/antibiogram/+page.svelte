@@ -64,54 +64,54 @@
 <h1>Antibiogram</h1>
 
 <div class="filters">
-<label>
-	Organism
-	<select bind:value={organism}>
-		<option value="">All organisms</option>
-		{#each Object.entries(ORGANISM_NAMES) as [id, name] (id)}
-			<option value={id}>{name}</option>
-		{/each}
-	</select>
-</label>
-
-<label>
-	Specimen
-	<select bind:value={specimen}>
-		<option value="">All</option>
-		{#each Object.entries(SPECIMEN_NAMES) as [id, name] (id)}
-			<option value={id}>{name}</option>
-		{/each}
-	</select>
-</label>
-
-<label>
-	Ward
-	<select bind:value={unit}>
-		<option value="-">All</option>
-		{#each Object.entries(WARD_NAMES) as [code, name] (code)}
-			<option value={code}>{name}</option>
-		{/each}
-	</select>
-</label>
-
-<label>
-	Period
-	<select bind:value={periodKind}>
-		<option value="annual">Annual</option>
-		<option value="last4w">Last 4 weeks</option>
-	</select>
-</label>
-
-{#if periodKind === 'annual'}
 	<label>
-		Year
-		<select bind:value={year}>
-			{#each YEARS as y (y)}
-				<option value={y}>{y}</option>
+		Organism
+		<select bind:value={organism}>
+			<option value="">All organisms</option>
+			{#each Object.entries(ORGANISM_NAMES) as [id, name] (id)}
+				<option value={id}>{name}</option>
 			{/each}
 		</select>
 	</label>
-{/if}
+
+	<label>
+		Specimen
+		<select bind:value={specimen}>
+			<option value="">All</option>
+			{#each Object.entries(SPECIMEN_NAMES) as [id, name] (id)}
+				<option value={id}>{name}</option>
+			{/each}
+		</select>
+	</label>
+
+	<label>
+		Ward
+		<select bind:value={unit}>
+			<option value="-">All</option>
+			{#each Object.entries(WARD_NAMES) as [code, name] (code)}
+				<option value={code}>{name}</option>
+			{/each}
+		</select>
+	</label>
+
+	<label>
+		Period
+		<select bind:value={periodKind}>
+			<option value="annual">Annual</option>
+			<option value="last4w">Last 4 weeks</option>
+		</select>
+	</label>
+
+	{#if periodKind === 'annual'}
+		<label>
+			Year
+			<select bind:value={year}>
+				{#each YEARS as y (y)}
+					<option value={y}>{y}</option>
+				{/each}
+			</select>
+		</label>
+	{/if}
 </div>
 
 {#if loading}
