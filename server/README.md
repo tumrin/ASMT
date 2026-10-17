@@ -56,7 +56,7 @@ For each scope × period × organism × specimen × antibiotic:
 
 - `n` — first isolates tested against the antibiotic;
 - `n_s` — of those, results `S`;
-- `susceptibility_rate = n_s / n` with a Wilson 95% interval; `null` if `n` is
+- `susceptibility_rate = n_s / n`; `null` if `n` is
   below `min_isolates`;
 - `traffic_light`: `green` above `green_above`, `yellow` above `yellow_above`,
   otherwise `red`; `none` when the rate is not reported.
@@ -117,8 +117,7 @@ outpatients) and the `is_s` / `is_r` outcome flags. No other fields are derived.
   "antibiogram": {
     "<scope>|<unit>|<period>": {
       "<organism>|<specimen>": [ { antibiotic, antibiotic_code, class,
-          reported_for, role, n, n_s, susceptibility_rate, ci_low, ci_high,
-          traffic_light } ] } }
+          reported_for, role, n, n_s, susceptibility_rate, traffic_light } ] } }
 }
 ```
 
@@ -151,7 +150,7 @@ scope=ward&unit=ICU&organism=Escherichia%20coli&specimen=urine
 ```
 
 Response: `options` (therapeutic agents ranked by susceptibility rate, with `n`,
-interval, `traffic_light` and the `source_scope` / `source_unit` / `source_period`
+`traffic_light` and the `source_scope` / `source_unit` / `source_period`
 the rate came from), `excluded` (`not_reported_for_specimen` or
 `no_specimen_data`), `data_as_of`, `limitations`.
 
@@ -227,7 +226,6 @@ A `uv` workspace of three packages: analysis writes the artifact, the API reads 
 packages/
   core/       resistance-core        shared, dependency-light domain logic
     src/resistance_core/
-      stats.py                 Wilson interval
       antibiotic_properties.py antibiotic metadata (class, reported_for, role) from antibiotics.csv
   analysis/   resistance-analysis    the pipeline; writes dataset.json
     src/resistance_analysis/

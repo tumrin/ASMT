@@ -6,7 +6,6 @@ from typing import Any
 
 import polars as pl
 from resistance_core.antibiotic_properties import metadata_by_code
-from resistance_core.stats import wilson_interval
 
 from .config import Settings
 
@@ -78,7 +77,6 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
     n_s = int(row["n_s"])
     if n >= settings.min_isolates:
         rate = n_s / n
-        low, high = wilson_interval(n_s, n)
         return {
             "antibiotic": row["antibiotic"],
             "antibiotic_code": row["antibiotic_code"],
@@ -88,8 +86,6 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
             "n": n,
             "n_s": n_s,
             "susceptibility_rate": round(rate, 4),
-            "ci_low": round(low, 4),
-            "ci_high": round(high, 4),
             "traffic_light": _traffic_light(rate, settings),
         }
     return {
@@ -101,8 +97,6 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
         "n": n,
         "n_s": n_s,
         "susceptibility_rate": None,
-        "ci_low": None,
-        "ci_high": None,
         "traffic_light": "none",
     }
 

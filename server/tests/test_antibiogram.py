@@ -308,9 +308,12 @@ def test_entry_thresholds_and_traffic_light_cutoffs() -> None:
     assert _entry(row(100, 60), "therapeutic", settings)["traffic_light"] == "red"
     assert _entry(row(100, 61), "therapeutic", settings)["traffic_light"] == "yellow"
 
+    reported = _entry(row(100, 80), "therapeutic", settings)
+    assert "ci_low" not in reported
+    assert "ci_high" not in reported
+
     small = _entry(row(29, 20), "therapeutic", settings)
     assert small["susceptibility_rate"] is None
-    assert small["ci_low"] is None
     assert small["traffic_light"] == "none"
 
     assert _traffic_light(0.5, settings) == "red"

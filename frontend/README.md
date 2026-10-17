@@ -106,7 +106,7 @@ moved from `spec.md`.
 
 - Input: scope and unit, organism and specimen.
 - `POST /recommendations` returns `options` ranked by susceptibility rate, each with
-  `n`, interval, `traffic_light` and the scope and period the rate came from; show
+  `n`, `traffic_light` and the scope and period the rate came from; show
   the source scope and period next to each rate, since fallback can make it differ
   from the requested one.
 - Show `excluded` agents with their reason, plus `data_as_of` and `limitations`.

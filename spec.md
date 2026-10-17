@@ -112,7 +112,7 @@ For each scope × period × organism × specimen × antibiotic:
 
 - `n` — first isolates tested against the antibiotic;
 - `n_s` — of those, results `S`;
-- `susceptibility_rate = n_s / n`, with a Wilson 95% interval; null if `n < 30`;
+- `susceptibility_rate = n_s / n`; null if `n < 30`;
 - `traffic_light`:
 
 | Light | Rule |
