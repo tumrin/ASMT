@@ -4,8 +4,10 @@
 		type AntibioticCell,
 		type AntibiogramResponse
 	} from '#lib/antibiogram.js';
+	import { ANTIBIOTIC_NAMES, antibioticName, type AntibioticCode } from '#lib/antibiotics.js';
 	import { ORGANISM_NAMES, organismName } from '#lib/organisms.js';
 	import { SPECIMEN_NAMES, specimenName } from '#lib/specimens.js';
+	import { trafficLightColor } from '#lib/trafficlight.js';
 	import { WARD_NAMES } from '#lib/wards.js';
 
 	// Empty string means no organism filter.
@@ -40,24 +42,14 @@
 		return () => controller.abort();
 	});
 
-	// Rows only list their own agents, so columns are the union across rows.
-	let columns = $derived.by(() => {
-		const byCode = new Map<string, string>();
-		for (const row of data?.organisms ?? []) {
-			for (const cell of row.antibiotics) byCode.set(cell.antibiotic_code, cell.antibiotic);
-		}
-		return [...byCode].sort((a, b) => a[1].localeCompare(b[1]));
-	});
+	// Every known antibiotic is a column, whether or not the current rows report it.
+	const columns: AntibioticCode[] = Object.keys(ANTIBIOTIC_NAMES).sort((a, b) =>
+		antibioticName(a).localeCompare(antibioticName(b), 'fi')
+	);
 
 	function cellFor(cells: AntibioticCell[], code: string): AntibioticCell | undefined {
 		return cells.find((cell) => cell.antibiotic_code === code);
 	}
-
-	const COLORS: Record<string, string> = {
-		green: '#c8e6c9',
-		yellow: '#fff59d',
-		red: '#ef9a9a'
-	};
 </script>
 
 <svelte:head>
@@ -118,8 +110,8 @@
 				<tr>
 					<th>Organism</th>
 					<th>Specimen</th>
-					{#each columns as [code, name] (code)}
-						<th title={name}>{code}</th>
+					{#each columns as code (code)}
+						<th title={code}>{antibioticName(code)}</th>
 					{/each}
 				</tr>
 			</thead>
@@ -128,9 +120,9 @@
 					<tr>
 						<td>{organismName(row.organism)}</td>
 						<td>{specimenName(row.specimen)}</td>
-						{#each columns as [code] (code)}
+						{#each columns as code (code)}
 							{@const cell = cellFor(row.antibiotics, code)}
-							<td style:background={cell ? COLORS[cell.traffic_light] : undefined}>
+							<td style:background={cell ? trafficLightColor(cell.traffic_light) : undefined}>
 								{#if cell}
 									{cell.susceptibility_rate === null
 										? ''
