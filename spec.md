@@ -13,9 +13,7 @@ served, never applied to the data.
 
 Backend: see `server/README.md`.
 
-### Frontend
-
-React, Vite, TypeScript
+Frontend: see `frontend/README.md`.
 
 ## 2. End user groups
 
@@ -52,7 +50,8 @@ React, Vite, TypeScript
    one; the individual view shows basic patient information, the patient's history
    and the empiric recommendations for each finding.
 5. **PDF export.** The user can export the antibiogram views and the patient view,
-   including their tables, as PDF. This is done entirely in the frontend.
+   including their tables, as PDF. This is done entirely in the frontend
+   (`frontend/README.md`).
 
 ## 4. Non-functional requirements
 
