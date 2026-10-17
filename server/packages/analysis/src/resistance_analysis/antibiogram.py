@@ -12,6 +12,11 @@ from .config import Settings
 LAST4W = "last4w"
 LAST4W_DAYS = 28
 
+# Inpatient sub-scopes by onset (spec §6.2): a culture is hospital-onset at or after
+# `Settings.hospital_onset_days` days since admission, community-onset before that.
+WARD_EARLY = "ward-early"
+WARD_LATE = "ward-late"
+
 
 @dataclass
 class Antibiogram:
@@ -119,19 +124,31 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
     }
 
 
-def _scoped_rows(rows: pl.DataFrame) -> pl.DataFrame:
+def _scoped_rows(rows: pl.DataFrame, settings: Settings) -> pl.DataFrame:
     # Ward and region count the first isolate per setting; hospital keeps the global
     # first isolate across settings (spec §6.1).
     hospital = rows.filter(pl.col("is_global_first")).with_columns(
         pl.lit("hospital").alias("scope"), pl.lit("-").alias("unit")
     )
-    ward = rows.filter(pl.col("ward_type") == "in").with_columns(
+    inpatients = rows.filter(pl.col("ward_type") == "in")
+    ward = inpatients.with_columns(
         pl.lit("ward").alias("scope"), pl.col("ward_code").alias("unit")
     )
+    # Onset sub-scopes partition the inpatient first isolates, so a fresh admission and
+    # a long stay track their own data. The rates follow the data automatically: if
+    # community-onset cultures drift toward community resistance, ward-early drifts with
+    # them. Cultures without an admission date stay in ward only.
+    days = pl.col("days_since_admission")
+    early = inpatients.filter(
+        days.is_not_null() & (days < settings.hospital_onset_days)
+    ).with_columns(pl.lit(WARD_EARLY).alias("scope"), pl.col("ward_code").alias("unit"))
+    late = inpatients.filter(
+        days.is_not_null() & (days >= settings.hospital_onset_days)
+    ).with_columns(pl.lit(WARD_LATE).alias("scope"), pl.col("ward_code").alias("unit"))
     region = rows.filter(pl.col("ward_type") == "out").with_columns(
         pl.lit("region").alias("scope"), pl.col("home_area").alias("unit")
     )
-    return pl.concat([hospital, ward, region])
+    return pl.concat([hospital, ward, early, late, region])
 
 
 def _scopes(
@@ -158,6 +175,8 @@ def _scopes(
     return {
         "hospital": [{"unit": "-", "label": "Hospital"}],
         "ward": in_wards,
+        "ward-early": in_wards,
+        "ward-late": in_wards,
         "region": regions,
     }
 
@@ -186,7 +205,7 @@ def build_antibiogram(
             (pl.col("reported_for") == "all")
             | (pl.col("reported_for") == pl.col("specimen"))
         )
-        .pipe(_scoped_rows)
+        .pipe(_scoped_rows, settings)
     )
 
     grouping = [

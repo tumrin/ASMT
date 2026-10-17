@@ -7,7 +7,7 @@ from fastapi.testclient import TestClient
 from resistance_analysis.config import Settings
 from resistance_analysis.load import load_dataset
 from resistance_analysis.pipeline import run
-from resistance_api.app import create_app
+from resistance_api.app import _fallback_chain, create_app
 
 
 def _settings(dataset_dir, tmp_path) -> Settings:
@@ -261,3 +261,73 @@ def test_recommendation_endpoint(dataset_dir, tmp_path) -> None:
         assert excluded["VAN"]["reason"] == "no_specimen_data"
         assert "FOX" not in excluded
         assert body["data_as_of"] == "2024-01-05"
+
+
+def test_fallback_chain_inserts_ward_for_onset_scopes() -> None:
+    assert _fallback_chain("ward-early", "MED-A", "last4w", "annual:2024") == [
+        "ward-early|MED-A|last4w",
+        "ward-early|MED-A|annual:2024",
+        "ward|MED-A|last4w",
+        "ward|MED-A|annual:2024",
+        "hospital|-|last4w",
+        "hospital|-|annual:2024",
+    ]
+    assert _fallback_chain("region", "Centre", "last4w", "annual:2024") == [
+        "region|Centre|last4w",
+        "region|Centre|annual:2024",
+        "hospital|-|last4w",
+        "hospital|-|annual:2024",
+    ]
+
+
+def test_recommendation_falls_back_from_onset_scope_to_ward(
+    dataset_dir, tmp_path
+) -> None:
+    run(_settings(dataset_dir, tmp_path))
+
+    with _client(tmp_path) as client:
+        body = client.get(
+            "/recommendations",
+            params={
+                "scope": "ward-late",
+                "unit": "MED-A",
+                "organism": "escherichia_coli",
+                "specimen": "urine",
+            },
+        ).json()
+        amp = next(
+            option for option in body["options"] if option["antibiotic_code"] == "AMP"
+        )
+        # No late-onset cell exists, so the rate comes from the whole ward.
+        assert amp["source_scope"] == "ward"
+        assert amp["source_unit"] == "MED-A"
+
+
+def test_recommendation_resolves_onset_from_days_since_admission(
+    dataset_dir, tmp_path
+) -> None:
+    run(_settings(dataset_dir, tmp_path))
+
+    with _client(tmp_path) as client:
+        params = {
+            "scope": "ward",
+            "unit": "MED-A",
+            "organism": "escherichia_coli",
+            "specimen": "urine",
+        }
+        early = client.get(
+            "/recommendations", params={**params, "days_since_admission": 2}
+        ).json()
+        assert early["scope"] == "ward-early"
+        assert early["options"][0]["source_scope"] == "ward-early"
+
+        late = client.get(
+            "/recommendations", params={**params, "days_since_admission": 3}
+        ).json()
+        assert late["scope"] == "ward-late"
+        # No late-onset cell exists, so it falls back to the whole ward.
+        assert late["options"][0]["source_scope"] == "ward"
+
+        # Without the onset hint the ward scope is unchanged.
+        plain = client.get("/recommendations", params=params).json()
+        assert plain["scope"] == "ward"

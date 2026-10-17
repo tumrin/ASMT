@@ -73,6 +73,7 @@ def _result(
     ward_type: str,
     ward_code: str,
     home_area: str,
+    days_since_admission: int | None = None,
 ) -> dict[str, Any]:
     return {
         "isolate_id": isolate_id,
@@ -86,6 +87,7 @@ def _result(
         "ward_type": ward_type,
         "ward_code": ward_code,
         "home_area": home_area,
+        "days_since_admission": days_since_admission,
     }
 
 
@@ -363,6 +365,102 @@ def test_first_isolate_rule_is_applied_per_setting() -> None:
     hospital = result.matrix["hospital|-|annual:2024"]["Escherichia coli|urine"][0]
     assert hospital["n"] == 2
     assert hospital["n_s"] == 1  # O1 (S) and N2 (R)
+
+
+def test_inpatient_onset_scopes_split_by_days_since_admission() -> None:
+    isolates = [
+        _isolate(
+            "E1",
+            "P1",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 1),
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+        _isolate(
+            "E2",
+            "P2",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 2),
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+        _isolate(
+            "E3",
+            "P3",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 3),
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+        _isolate(
+            "E4",
+            "P4",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 4),
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+    ]
+
+    def result_for(isolate_id: str, is_s: bool, days: int | None) -> dict[str, Any]:
+        return _result(
+            isolate_id,
+            "Escherichia coli",
+            "urine",
+            "ampicillin",
+            "AMP",
+            "penicillins",
+            "all",
+            is_s,
+            "in",
+            "MED-A",
+            "Centre",
+            days_since_admission=days,
+        )
+
+    susceptibility = [
+        result_for("E1", True, 0),
+        result_for("E2", False, 2),
+        result_for("E3", False, 3),
+        result_for("E4", True, None),
+    ]
+    contexts = [
+        {
+            "culture_id": f"c{index}",
+            "patient_id": f"P{index}",
+            "ward_type": "in",
+            "sample_date": date(2024, 6, index),
+        }
+        for index in range(1, 5)
+    ]
+    frames = _frames(isolates, susceptibility, contexts)
+    antibiogram = build_antibiogram(*frames, Settings())
+
+    def cell(scope: str) -> dict[str, Any]:
+        return antibiogram.matrix[f"{scope}|MED-A|annual:2024"][
+            "Escherichia coli|urine"
+        ][0]
+
+    # Onset sub-scopes partition the inpatient isolates at the 3-day rule.
+    assert cell("ward-early")["n"] == 2  # days 0 and 2
+    assert cell("ward-early")["n_s"] == 1
+    assert cell("ward-late")["n"] == 1  # day 3
+    assert cell("ward-late")["n_s"] == 0
+    # The whole-ward scope keeps every inpatient, including the missing admission date.
+    assert cell("ward")["n"] == 4
+    assert cell("ward")["n_s"] == 2
+
+    assert [unit["unit"] for unit in antibiogram.scopes["ward-early"]] == ["MED-A"]
+    assert [unit["unit"] for unit in antibiogram.scopes["ward-late"]] == ["MED-A"]
 
 
 def test_applicability_and_screens_are_kept_with_role() -> None:
