@@ -64,10 +64,3 @@ def write_outputs(result: PipelineResult) -> None:
     (out_dir / "dataset.json").write_text(
         json.dumps(result.document, ensure_ascii=False, default=str), encoding="utf-8"
     )
-
-
-def build_document_only(settings: Settings) -> dict[str, Any]:
-    return run(settings, write=False).document
-
-
-__all__ = ["PipelineResult", "build_document_only", "run", "write_outputs"]

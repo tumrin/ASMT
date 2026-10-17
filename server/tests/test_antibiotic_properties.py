@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import polars as pl
-from resistance_core.antibiotic_properties import (
+
+from resistance.antibiotic_properties import (
     is_screen,
     metadata_by_code,
     metadata_from_row,

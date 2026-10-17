@@ -5,8 +5,8 @@ from datetime import date, timedelta
 from typing import Any
 
 import polars as pl
-from resistance_core.antibiotic_properties import metadata_by_code
 
+from .antibiotic_properties import metadata_by_code
 from .config import Settings
 
 LAST4W = "last4w"
@@ -98,19 +98,7 @@ def _traffic_light(rate: float, settings: Settings) -> str:
 def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]:
     n = int(row["n"])
     n_s = int(row["n_s"])
-    if n >= settings.min_isolates:
-        rate = n_s / n
-        return {
-            "antibiotic": row["antibiotic"],
-            "antibiotic_code": row["antibiotic_code"],
-            "class": row["class"],
-            "reported_for": row["reported_for"],
-            "role": role,
-            "n": n,
-            "n_s": n_s,
-            "susceptibility_rate": round(rate, 4),
-            "traffic_light": _traffic_light(rate, settings),
-        }
+    rate = n_s / n if n >= settings.min_isolates else None
     return {
         "antibiotic": row["antibiotic"],
         "antibiotic_code": row["antibiotic_code"],
@@ -119,8 +107,8 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
         "role": role,
         "n": n,
         "n_s": n_s,
-        "susceptibility_rate": None,
-        "traffic_light": "none",
+        "susceptibility_rate": None if rate is None else round(rate, 4),
+        "traffic_light": "none" if rate is None else _traffic_light(rate, settings),
     }
 
 

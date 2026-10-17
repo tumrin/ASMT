@@ -4,8 +4,8 @@ from pathlib import Path
 
 import polars as pl
 import pytest
-from resistance_analysis.load import SchemaError, load_dataset
 
+from resistance.load import SchemaError, load_dataset
 from tests.conftest import write_dataset
 
 

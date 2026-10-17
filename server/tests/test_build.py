@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import polars as pl
-from resistance_analysis.build import build_contexts
-from resistance_analysis.load import load_dataset
+
+from resistance.build import build_contexts
+from resistance.load import load_dataset
 
 
 def test_days_since_admission_is_derived(dataset_dir) -> None:

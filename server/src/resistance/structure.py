@@ -4,9 +4,9 @@ from collections import defaultdict
 from typing import Any
 
 import polars as pl
-from resistance_core.antibiotic_properties import metadata_from_row
 
 from .antibiogram import Antibiogram
+from .antibiotic_properties import metadata_from_row
 from .config import Settings
 from .load import Dataset
 
@@ -20,10 +20,10 @@ def _susceptibility_map(ab_analytics: pl.DataFrame) -> dict[str, dict[str, str]]
     return result
 
 
-def _isolate_records(
+def _isolates_by_culture(
     analytics: pl.DataFrame, susceptibility: dict[str, dict[str, str]]
-) -> dict[str, dict[str, object]]:
-    records: dict[str, dict[str, object]] = {}
+) -> dict[str, list[dict[str, object]]]:
+    by_culture: dict[str, list[dict[str, object]]] = defaultdict(list)
     for row in analytics.select(
         "isolate_id",
         "culture_id",
@@ -35,20 +35,22 @@ def _isolate_records(
         "vre",
         "cpe",
     ).iter_rows(named=True):
-        records[row["isolate_id"]] = {
-            "isolate_id": row["isolate_id"],
-            "isolate_no": row["isolate_no"],
-            "organism": row["organism"],
-            "quantity": row["quantity"],
-            "flags": {
-                "esbl": int(row["esbl"]),
-                "mrsa": int(row["mrsa"]),
-                "vre": int(row["vre"]),
-                "cpe": int(row["cpe"]),
-            },
-            "susceptibility": susceptibility.get(row["isolate_id"], {}),
-        }
-    return records
+        by_culture[row["culture_id"]].append(
+            {
+                "isolate_id": row["isolate_id"],
+                "isolate_no": row["isolate_no"],
+                "organism": row["organism"],
+                "quantity": row["quantity"],
+                "flags": {
+                    "esbl": int(row["esbl"]),
+                    "mrsa": int(row["mrsa"]),
+                    "vre": int(row["vre"]),
+                    "cpe": int(row["cpe"]),
+                },
+                "susceptibility": susceptibility.get(row["isolate_id"], {}),
+            }
+        )
+    return by_culture
 
 
 def _antibiotic_payload(row: dict[str, Any]) -> dict[str, Any]:
@@ -92,15 +94,7 @@ def build_document(
     settings: Settings,
 ) -> dict[str, Any]:
     susceptibility = _susceptibility_map(ab_analytics)
-    isolates = _isolate_records(analytics, susceptibility)
-
-    isolates_by_culture: dict[str, list[dict[str, object]]] = defaultdict(list)
-    for isolate_id, culture_id in analytics.select(
-        "isolate_id", "culture_id"
-    ).iter_rows():
-        record = isolates.get(isolate_id)
-        if record is not None:
-            isolates_by_culture[culture_id].append(record)
+    isolates_by_culture = _isolates_by_culture(analytics, susceptibility)
 
     patients_meta = {
         row["patient_id"]: row for row in ds.patients.iter_rows(named=True)

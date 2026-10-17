@@ -1,4 +1,4 @@
-# resistance-analysis
+# resistance
 
 Cumulative-antibiogram analysis over the synthetic microbiology dataset. The
 pipeline reads the six CSVs, computes the susceptibility matrix and the patient
@@ -178,16 +178,14 @@ the rate came from), `excluded` (`not_reported_for_specimen` or
 
 ## Usage
 
-This is a [uv](https://docs.astral.sh/uv/) workspace and lives in `server/`. Run all
+This is a [uv](https://docs.astral.sh/uv/) project and lives in `server/`. Run all
 commands from the `server/` directory:
 
 ```bash
 # from server/
 uv sync
 
-# Activate virtual env
-source .venv/bin/active.<shell>
-
+# 1. write the artifact
 uv run resistance-analysis --out output
 
 # 2. serve the artifact
@@ -197,10 +195,8 @@ uv run resistance-api
 uv run pytest
 ```
 
-`uv sync` creates `.venv/` and installs the workspace packages
-(`resistance-analysis`, `resistance-api` and the shared `resistance-core`) plus the
-dev group, so no manual activation is needed. `uv run` executes inside that
-environment.
+`uv sync` creates `.venv/` and installs the `resistance` package plus the dev group,
+so no manual activation is needed. `uv run` executes inside that environment.
 
 The analysis takes `--data-dir` and `--out`; it writes `output/dataset.json`. The
 API reads that file, so run the analysis first. It binds `127.0.0.1:8000` by
@@ -217,57 +213,48 @@ Run the backend locally from `server/`:
 
 ```bash
 uv sync                                  # once, and after dependency changes
-uv run resistance-analysis --out output  # writes the artifacts to output/
-uv run resistance-api                    # serves them on http://127.0.0.1:8000
+uv run resistance-analysis --out output  # writes the artifact to output/
+uv run resistance-api                    # serves it on http://127.0.0.1:8000
 ```
 
 Open `http://127.0.0.1:8000/docs` for the interactive OpenAPI docs. The API loads the
-artifacts once at startup, so restart it after you rerun the analysis. It has no
-auto-reload. If you write the artifacts somewhere other than `output/`, point the API
-at them with `--dataset`, `--analytics`, `--deviations` and `--outliers`.
+artifact once at startup, so restart it after you rerun the analysis. It has no
+auto-reload. If you write the artifact somewhere other than `output/`, point the API
+at it with `--dataset`.
 
 Before you push, run the tests, lint and type check:
 
 ```bash
 uv run pytest
-uv run pytest tests/test_tiers.py::test_name   # single test
+uv run pytest tests/test_antibiogram.py::test_name  # single test
 uv run ruff check . && uv run ruff format .
 uv run ty check
 ```
 
 Tests use a tiny dataset with deliberately injected anomalies
-(`tests/conftest.py::small_frames`), built against `load.SCHEMAS`. When you add a
-deviation detector, extend that fixture. The real dataset is self-consistent, so the
-consistency checks find nothing on it.
+(`tests/conftest.py::small_frames`), built against `load.SCHEMAS`.
 
 ## Layout
 
-A `uv` workspace of three packages: analysis writes the artifact, the API reads it.
+One package: the analysis pipeline writes the artifact, the API subpackage serves it.
 
 ```
-packages/
-  core/       resistance-core        shared, dependency-light domain logic
-    src/resistance_core/
-      antibiotic_properties.py antibiotic metadata (class, reported_for, role) from antibiotics.csv
-  analysis/   resistance-analysis    the pipeline; writes dataset.json
-    src/resistance_analysis/
-      config.py      runtime settings
-      load.py        stage 1: read + validate
-      build.py       stage 2: joins, derived columns, S/R outcome
-      antibiogram.py periods, first-isolate rule, scopes and susceptibility cells
-      structure.py   stage 4: JSON document
-      pipeline.py    orchestration + write
-      __main__.py    `resistance-analysis` CLI (run)
-  api/        resistance-api         serving layer over the artifact
-    src/resistance_api/
-      app.py         FastAPI app + routes
-      responses.py   Pydantic response models
-      __main__.py    `resistance-api` CLI (serve)
+src/resistance/
+  antibiotic_properties.py antibiotic metadata (class, reported_for, role) from antibiotics.csv
+  config.py      runtime settings
+  load.py        stage 1: read + validate
+  build.py       stage 2: joins, derived columns, S/R outcome
+  antibiogram.py periods, first-isolate rule, scopes and susceptibility cells
+  structure.py   stage 4: JSON document
+  pipeline.py    orchestration + write
+  cli.py         the `resistance-analysis` and `resistance-api` entry points
+  api/
+    app.py       FastAPI app + routes
+    responses.py Pydantic response models
 ```
 
-The API imports neither `resistance_analysis` nor `resistance_core`; it only serves
-the artifact document. `tests/test_boundary.py` enforces this both statically and
-at import time.
+The `api` subpackage imports no pipeline module; it only serves the artifact
+document.
 
 ## Limitations
 
