@@ -138,5 +138,6 @@ implemented yet:
 - Recommendations and patient views; `routes/+page.svelte` is still the SvelteKit
   welcome placeholder.
 - API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
-- PDF export: no PDF library chosen.
+- PDF export: the antibiogram uses the browser's print dialog, including the active
+  filters; patient-view export is not implemented.
 - Deployment adapter: `adapter-auto` is still in place.
