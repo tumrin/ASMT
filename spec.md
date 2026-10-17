@@ -77,6 +77,14 @@ susceptibility (isolate_id)`.
 
 Columns read and load validation are specified in `server/README.md`.
 
+### 5.2 Organism names
+
+On load, `organism` in `isolates.csv` and `susceptibility.csv` is normalized: trim
+surrounding whitespace, lowercase, then replace each run of `.` and whitespace with
+`_` (`Escherichia coli` → `escherichia_coli`). Every output and API value, including
+the `organism` filter, uses the normalized name. The frontend maps it to a display
+name.
+
 ## 6. Antibiogram model
 
 ### 6.1 Periods and first-isolate rule
@@ -139,7 +147,9 @@ the response states which scope and period each rate came from.
 - **A5** "Region" for outpatient units is the patient's `home_area`.
 - **A6** "Last four weeks" is relative to the latest `sample_date` in the data, not
   today's date.
-- **A7** Organism names are matched exactly; there is no taxonomy normalisation.
+- **A7** Organism names are matched exactly after the string normalization in §5.2;
+  there is no taxonomy normalisation (e.g. `E. coli` and `Escherichia coli` stay
+  distinct).
 - **A8** Findings are reported only; the data is never rewritten.
 
 ## 8. Limitations and non-goals
