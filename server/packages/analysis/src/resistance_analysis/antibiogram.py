@@ -38,21 +38,18 @@ def _period_windows(
 def _first_isolates(
     isolates: pl.DataFrame,
     windows: dict[str, tuple[date, date]],
-    surveillance: bool,
 ) -> pl.DataFrame:
+    """One isolate per patient x organism x specimen per period, earliest first."""
     frames: list[pl.DataFrame] = []
     for label, (start, end) in windows.items():
         window = isolates.filter(
             (pl.col("sample_date") >= start) & (pl.col("sample_date") <= end)
         )
-        if surveillance:
-            picked = (
-                window.sort("sample_date", "isolate_id")
-                .group_by("patient_id", "organism", "specimen", maintain_order=True)
-                .agg(pl.col("isolate_id").first().alias("isolate_id"))
-            )
-        else:
-            picked = window.select("isolate_id").unique()
+        picked = (
+            window.sort("sample_date", "isolate_id")
+            .group_by("patient_id", "organism", "specimen", maintain_order=True)
+            .agg(pl.col("isolate_id").first().alias("isolate_id"))
+        )
         frames.append(
             picked.select("isolate_id").with_columns(pl.lit(label).alias("period"))
         )
@@ -167,7 +164,7 @@ def build_antibiogram(
         return Antibiogram({}, scopes, [], data_as_of)
 
     windows = _period_windows(isolates, data_as_of)
-    first = _first_isolates(isolates, windows, settings.surveillance)
+    first = _first_isolates(isolates, windows)
 
     rows = (
         ab_analytics.join(first, on="isolate_id", how="inner")

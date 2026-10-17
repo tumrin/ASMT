@@ -6,20 +6,16 @@ from datetime import date, datetime
 from pathlib import Path
 from typing import Any
 
-import polars as pl
 from fastapi import FastAPI, HTTPException, Query
 from fastapi import Path as PathParam
-from resistance_core.antibiotic_properties import metadata_by_code, properties_payload
 
 from .responses import (
     AntibiogramResponse,
     AntibioticsResponse,
-    DeviationsResponse,
     ErrorResponse,
     HealthResponse,
     HistoryResponse,
     MetadataResponse,
-    OutliersResponse,
     PatientsResponse,
     PatientSummary,
     PatientWardResponse,
@@ -50,8 +46,7 @@ cutoffs.
 
 The antibiogram is the susceptibility matrix per scope (hospital, inpatient ward
 or outpatient region) and period (calendar year or the last four weeks). The
-recommendation endpoint ranks agents by cumulative susceptibility. Findings in
-the deviation and outlier logs are reported only and never applied to the data.
+recommendation endpoint ranks agents by cumulative susceptibility.
 
 This is an unauthenticated local exploration service: there is no
 authentication, authorisation or pagination.
@@ -77,23 +72,7 @@ OPENAPI_TAGS = [
         "name": "Recommendations",
         "description": "Empiric antibiotic ranking; decision support, not a prescription.",
     },
-    {
-        "name": "Data quality",
-        "description": "Reported consistency deviations and statistical outliers.",
-    },
 ]
-
-
-def _read_log(path: Path) -> list[dict[str, Any]]:
-    rows = pl.read_csv(path).to_dicts()
-    for row in rows:
-        detail = row.get("detail")
-        if isinstance(detail, str):
-            try:
-                row["detail"] = json.loads(detail)
-            except json.JSONDecodeError:
-                pass
-    return rows
 
 
 def _parse_date(value: Any) -> date | None:
@@ -151,6 +130,18 @@ def _patient_history(
     return rows[:limit]
 
 
+def _ward_counts(doc: dict[str, Any], ward_code: str) -> dict[str, int]:
+    patients = cultures = isolates = 0
+    for patient in doc.get("patients", {}).values():
+        ward = patient.get("wards", {}).get(ward_code)
+        if ward is None:
+            continue
+        patients += 1
+        cultures += len(ward.get("cultures", []))
+        isolates += sum(len(culture["isolates"]) for culture in ward["cultures"])
+    return {"patients": patients, "cultures": cultures, "isolates": isolates}
+
+
 def _default_period(periods: list[str]) -> str:
     annual = [period for period in periods if period.startswith("annual:")]
     if annual:
@@ -184,14 +175,8 @@ def _select_cell(
     return cells[0]
 
 
-def create_app(
-    dataset_path: str | Path,
-    deviations_path: str | Path | None = None,
-    outliers_path: str | Path | None = None,
-) -> FastAPI:
+def create_app(dataset_path: str | Path) -> FastAPI:
     dataset_path = Path(dataset_path)
-    deviations_path = Path(deviations_path) if deviations_path else None
-    outliers_path = Path(outliers_path) if outliers_path else None
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -199,26 +184,14 @@ def create_app(
             raise FileNotFoundError(f"dataset.json not found: {dataset_path}")
         doc = json.loads(dataset_path.read_text(encoding="utf-8"))
         app.state.doc = doc
-        app.state.antibiotics = pl.DataFrame(doc["antibiotics"])
-        app.state.antibiotic_metadata = metadata_by_code(app.state.antibiotics)
         app.state.data_as_of = _parse_date(doc.get("metadata", {}).get("data_as_of"))
-
-        if deviations_path and deviations_path.exists():
-            app.state.deviations = _read_log(deviations_path)
-        else:
-            app.state.deviations = []
-
-        if outliers_path and outliers_path.exists():
-            app.state.outliers = _read_log(outliers_path)
-        else:
-            app.state.outliers = []
         yield
 
     app = FastAPI(
         title="Cumulative antibiogram",
         summary="Susceptibility rates, antibiogram and empiric recommendations",
         description=DESCRIPTION,
-        version="0.2.0",
+        version="0.3.0",
         openapi_tags=OPENAPI_TAGS,
         lifespan=lifespan,
     )
@@ -346,7 +319,7 @@ def create_app(
         "/wards/{ward_code}",
         tags=["Wards"],
         summary="Ward summary",
-        description="Volumes, case mix, top organisms and per-organism flag rates.",
+        description="Ward metadata and culture/isolate counts.",
         response_model=WardSummary,
         responses={404: {"model": ErrorResponse, "description": "Unknown ward"}},
     )
@@ -358,6 +331,7 @@ def create_app(
             raise HTTPException(status_code=404, detail=f"unknown ward {ward_code}")
         return {
             **ward,
+            "counts": _ward_counts(app.state.doc, ward_code),
             "data_as_of": str(app.state.data_as_of) if app.state.data_as_of else None,
         }
 
@@ -396,13 +370,13 @@ def create_app(
         tags=["Antibiogram"],
         summary="Antibiotic metadata",
         description=(
-            "Metadata derived from antibiotics.csv: class, reported_for, derived "
-            "role (screen/therapeutic) and marker flags."
+            "Metadata derived from antibiotics.csv: class, reported_for and derived "
+            "role (screen/therapeutic)."
         ),
         response_model=AntibioticsResponse,
     )
     def get_antibiotics() -> dict[str, object]:
-        return properties_payload(app.state.antibiotics)
+        return {"antibiotics": app.state.doc["antibiotics"]}
 
     @app.get(
         "/antibiogram",
@@ -585,84 +559,5 @@ def create_app(
             "excluded": excluded,
             "limitations": LIMITATIONS,
         }
-
-    @app.get(
-        "/deviations",
-        tags=["Data quality"],
-        summary="Consistency deviation log",
-        description=(
-            "Rule-based findings, reported only. `detail` is a JSON object; "
-            "findings are never applied to the data."
-        ),
-        response_model=DeviationsResponse,
-    )
-    def get_deviations(
-        family: str | None = Query(
-            default=None, description="`consistency` or `statistical`."
-        ),
-        severity: str | None = Query(
-            default=None, description="`info`, `warning` or `critical`."
-        ),
-        detector: str | None = Query(
-            default=None, description="Detector name, e.g. `orphan_isolate`."
-        ),
-    ) -> dict[str, object]:
-        rows = app.state.deviations
-        if family:
-            rows = [row for row in rows if row["family"] == family]
-        if severity:
-            rows = [row for row in rows if row["severity"] == severity]
-        if detector:
-            rows = [row for row in rows if row["detector"] == detector]
-        return {"n": len(rows), "deviations": rows}
-
-    @app.get(
-        "/outliers",
-        tags=["Data quality"],
-        summary="Statistical outlier log",
-        description=(
-            "Funnel-plot outliers, reported only. Filtering on the cell fields "
-            "reads `detail`; `min_n` is a consumer-side filter, not a cutoff."
-        ),
-        response_model=OutliersResponse,
-    )
-    def get_outliers(
-        detector: str | None = Query(
-            default=None, description="`ward_rate_outlier` or `weekly_rate_outlier`."
-        ),
-        severity: str | None = Query(
-            default=None, description="`info`, `warning` or `critical`."
-        ),
-        organism: str | None = Query(default=None, description="Cell organism."),
-        antibiotic: str | None = Query(default=None, description="Cell antibiotic."),
-        specimen: str | None = Query(default=None, description="Cell specimen."),
-        ward_code: str | None = Query(default=None, description="Cell ward."),
-        week: str | None = Query(
-            default=None, description="Cell ISO year/week for weekly outliers."
-        ),
-        min_n: int | None = Query(
-            default=None, description="Minimum cell `n`; consumer-side filter."
-        ),
-    ) -> dict[str, object]:
-        def matches(row: dict[str, Any]) -> bool:
-            detail = row.get("detail") or {}
-            if detector and row["detector"] != detector:
-                return False
-            if severity and row["severity"] != severity:
-                return False
-            if organism and detail.get("organism") != organism:
-                return False
-            if antibiotic and detail.get("antibiotic") != antibiotic:
-                return False
-            if specimen and detail.get("specimen") != specimen:
-                return False
-            if ward_code and detail.get("ward_code") != ward_code:
-                return False
-            if week and detail.get("week") != week:
-                return False
-            return min_n is None or int(detail.get("n", 0)) >= min_n
-
-        rows = [row for row in app.state.outliers if matches(row)]
-        return {"n": len(rows), "outliers": rows}
 
     return app

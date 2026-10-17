@@ -16,25 +16,22 @@ def _settings(dataset_dir, tmp_path) -> Settings:
 
 def _client(tmp_path) -> TestClient:
     out = tmp_path / "output"
-    app = create_app(out / "dataset.json", out / "deviations.csv", out / "outliers.csv")
+    app = create_app(out / "dataset.json")
     return TestClient(app)
 
 
-def test_pipeline_writes_outputs(dataset_dir, tmp_path) -> None:
+def test_pipeline_writes_only_the_document(dataset_dir, tmp_path) -> None:
     result = run(_settings(dataset_dir, tmp_path))
 
     assert (tmp_path / "output" / "dataset.json").exists()
-    assert (tmp_path / "output" / "analytics.csv").exists()
-    assert (tmp_path / "output" / "deviations.csv").exists()
-    assert (tmp_path / "output" / "outliers.csv").exists()
-    assert not (tmp_path / "output" / "antibiotic_properties.json").exists()
+    assert not (tmp_path / "output" / "analytics.csv").exists()
+    assert not (tmp_path / "output" / "deviations.csv").exists()
+    assert not (tmp_path / "output" / "outliers.csv").exists()
 
-    # Deviations are reported only; every record is kept unchanged.
-    isolates = result.raw.isolates
-    assert "C4-1" in isolates["isolate_id"].to_list()
-    assert isolates.filter(pl.col("isolate_id") == "C5-1")["mrsa"][0] == 1
-    assert isolates.filter(pl.col("isolate_id") == "C2-1")["mrsa"][0] == 1
-    assert "removed" not in result.deviation_summary
+    # Every record is kept unchanged.
+    assert "C4-1" in result.raw.isolates["isolate_id"].to_list()
+    assert result.raw.isolates.filter(pl.col("isolate_id") == "C5-1")["mrsa"][0] == 1
+    assert result.raw.isolates.filter(pl.col("isolate_id") == "C2-1")["mrsa"][0] == 1
 
 
 def test_pipeline_does_not_change_data(dataset_dir, tmp_path) -> None:
@@ -99,12 +96,13 @@ def test_document_structure_and_lookup(dataset_dir, tmp_path) -> None:
     ]
     assert [unit["unit"] for unit in metadata["scopes"]["region"]] == ["Centre"]
     assert metadata["settings"]["min_isolates"] == 30
-    assert "as_of" not in metadata
-    assert "age_band_edges" in metadata
-    assert "outlier_summary" in metadata
+    assert "age_band_edges" not in metadata
+    assert "deviation_summary" not in metadata
+    assert "outlier_summary" not in metadata
     assert "thresholds" not in metadata
 
     assert "hospital|-|annual:2024" in doc["antibiogram"]
+    assert doc["wards"]["MED-A"]["ward_type"] == "in"
 
 
 def test_api_endpoints(dataset_dir, tmp_path) -> None:
@@ -143,9 +141,8 @@ def test_api_endpoints(dataset_dir, tmp_path) -> None:
         body = ward.json()
         assert body["ward_code"] == "MED-A"
         assert body["counts"]["cultures"] >= 1
-        assert "flag_rates_by_organism" in body
-        assert "antibiogram" not in body
-        assert "resistance_by_antibiotic" not in body
+        assert "flag_rates_by_organism" not in body
+        assert "organism" not in body
         assert client.get("/wards/NOPE").status_code == 404
 
         antibiotics = client.get("/antibiotics")
@@ -155,22 +152,10 @@ def test_api_endpoints(dataset_dir, tmp_path) -> None:
             for entry in antibiotics.json()["antibiotics"]
         }
         assert by_code["FOX"]["role"] == "screen"
-        assert by_code["FOX"]["marker_flags"] == ["mrsa"]
+        assert "marker_flags" not in by_code["FOX"]
 
-        deviations = client.get("/deviations", params={"family": "consistency"})
-        assert deviations.status_code == 200
-        assert deviations.json()["n"] > 0
-        assert isinstance(deviations.json()["deviations"][0]["detail"], dict)
-
-        outliers = client.get("/outliers")
-        assert outliers.status_code == 200
-        assert "outliers" in outliers.json()
-        assert (
-            client.get(
-                "/outliers", params={"detector": "ward_rate_outlier"}
-            ).status_code
-            == 200
-        )
+        assert client.get("/deviations").status_code == 404
+        assert client.get("/outliers").status_code == 404
 
 
 def test_antibiogram_endpoint(dataset_dir, tmp_path) -> None:

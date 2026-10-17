@@ -9,12 +9,10 @@ package = false
 constraint-dependencies = [
     "fastapi>=0.143.3",
     "httpx2>=2.13.1",
-    "numpy>=2.5.4",
     "polars>=2.0.0",
     "pydantic>=2.14.1",
     "pytest>=9.1.1",
     "ruff>=0.17.1",
-    "scipy>=1.18.1",
     "ty>=0.0.89",
     "uvicorn>=0.54.0",
 ]

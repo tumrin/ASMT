@@ -1,7 +1,7 @@
 [project]
 name = "resistance-core"
 version = "0.1.0"
-description = "Shared domain logic (statistics, demographics, tier model) used by the pipeline and the API."
+description = "Shared domain logic (statistics, antibiotic metadata) used by the pipeline and the API."
 requires-python = ">=3.12"
 dependencies = ["polars"]
 

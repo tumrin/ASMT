@@ -34,7 +34,6 @@ def _isolate_records(
         "mrsa",
         "vre",
         "cpe",
-        "n_resistant_classes",
     ).iter_rows(named=True):
         records[row["isolate_id"]] = {
             "isolate_id": row["isolate_id"],
@@ -47,7 +46,6 @@ def _isolate_records(
                 "vre": int(row["vre"]),
                 "cpe": int(row["cpe"]),
             },
-            "n_resistant_classes": int(row["n_resistant_classes"]),
             "susceptibility": susceptibility.get(row["isolate_id"], {}),
         }
     return records
@@ -62,7 +60,26 @@ def _antibiotic_payload(row: dict[str, Any]) -> dict[str, Any]:
         "class": meta.antibiotic_class,
         "reported_for": meta.reported_for,
         "role": meta.role,
-        "marker_flags": list(meta.marker_flags),
+    }
+
+
+def _ward_payload(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "ward_code": row.get("ward_code"),
+        "ward_fi": row.get("ward_fi"),
+        "ward_en": row.get("ward_en"),
+        "ward_type": row.get("ward_type"),
+        "institution": row.get("institution"),
+    }
+
+
+def _patient_payload(meta: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "patient_id": meta.get("patient_id"),
+        "sex": meta.get("sex"),
+        "birth_year": meta.get("birth_year"),
+        "home_area": meta.get("home_area"),
+        "wards": {},
     }
 
 
@@ -72,18 +89,15 @@ def build_document(
     analytics: pl.DataFrame,
     ab_analytics: pl.DataFrame,
     antibiogram: Antibiogram,
-    ward_summaries: dict[str, dict[str, Any]],
-    deviation_summary: dict[str, Any],
-    outlier_summary: dict[str, Any],
     settings: Settings,
-    age_band_edges: tuple[float, ...],
 ) -> dict[str, Any]:
     susceptibility = _susceptibility_map(ab_analytics)
     isolates = _isolate_records(analytics, susceptibility)
 
     isolates_by_culture: dict[str, list[dict[str, object]]] = defaultdict(list)
-    isolate_culture = analytics.select("isolate_id", "culture_id")
-    for isolate_id, culture_id in isolate_culture.iter_rows():
+    for isolate_id, culture_id in analytics.select(
+        "isolate_id", "culture_id"
+    ).iter_rows():
         record = isolates.get(isolate_id)
         if record is not None:
             isolates_by_culture[culture_id].append(record)
@@ -93,32 +107,22 @@ def build_document(
     }
     wards_meta = {row["ward_code"]: row for row in ds.wards.iter_rows(named=True)}
 
-    patients: dict[str, dict[str, Any]] = {}
+    patients: dict[str, dict[str, Any]] = {
+        patient_id: _patient_payload(meta) for patient_id, meta in patients_meta.items()
+    }
 
     context_rows = contexts.sort("patient_id", "ward_code", "sample_date")
     for row in context_rows.iter_rows(named=True):
-        patient_id = row["patient_id"]
-        ward_code = row["ward_code"]
-        meta = patients_meta.get(patient_id, {})
-        patient = patients.setdefault(
-            patient_id,
-            {
-                "patient_id": patient_id,
-                "sex": meta.get("sex"),
-                "birth_year": meta.get("birth_year"),
-                "home_area": meta.get("home_area"),
-                "wards": {},
-            },
-        )
-        ward_meta = wards_meta.get(ward_code, {})
+        patient = patients.get(row["patient_id"])
+        if patient is None:
+            patient = _patient_payload({"patient_id": row["patient_id"]})
+            patients[row["patient_id"]] = patient
+        ward_meta = wards_meta.get(row["ward_code"], {})
         ward = patient["wards"].setdefault(
-            ward_code,
+            row["ward_code"],
             {
-                "ward_code": ward_code,
-                "ward_fi": ward_meta.get("ward_fi"),
-                "ward_en": ward_meta.get("ward_en"),
-                "ward_type": ward_meta.get("ward_type"),
-                "institution": ward_meta.get("institution"),
+                **_ward_payload(ward_meta),
+                "ward_code": row["ward_code"],
                 "cultures": [],
             },
         )
@@ -138,19 +142,6 @@ def build_document(
         )
 
     sample_dates = contexts["sample_date"]
-
-    for patient_id, meta in patients_meta.items():
-        patients.setdefault(
-            patient_id,
-            {
-                "patient_id": patient_id,
-                "sex": meta.get("sex"),
-                "birth_year": meta.get("birth_year"),
-                "home_area": meta.get("home_area"),
-                "wards": {},
-            },
-        )
-
     metadata = {
         "source": str(settings.data_dir),
         "counts": {
@@ -164,12 +155,9 @@ def build_document(
             "end": str(sample_dates.max()),
         },
         "data_as_of": str(sample_dates.max()),
-        "age_band_edges": list(age_band_edges),
         "settings": settings.to_json(),
         "scopes": antibiogram.scopes,
         "periods": antibiogram.periods,
-        "deviation_summary": deviation_summary,
-        "outlier_summary": outlier_summary,
     }
 
     return {
@@ -177,7 +165,7 @@ def build_document(
         "antibiotics": [
             _antibiotic_payload(row) for row in ds.antibiotics.iter_rows(named=True)
         ],
-        "wards": ward_summaries,
+        "wards": {code: _ward_payload(meta) for code, meta in wards_meta.items()},
         "patients": patients,
         "antibiogram": antibiogram.matrix,
     }

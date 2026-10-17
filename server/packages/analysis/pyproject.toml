@@ -1,13 +1,11 @@
 [project]
 name = "resistance-analysis"
 version = "0.1.0"
-description = "Staged analysis of patient-level correlates of bacterial resistance; writes the JSON artifacts."
+description = "Cumulative-antibiogram analysis over the synthetic microbiology dataset; writes dataset.json."
 requires-python = ">=3.12"
 dependencies = [
-    "numpy",
     "polars",
     "resistance-core",
-    "scipy",
 ]
 
 [project.scripts]

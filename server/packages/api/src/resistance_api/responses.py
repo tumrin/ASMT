@@ -1,6 +1,6 @@
 """Pydantic response models for the OpenAPI/Swagger schema.
 
-The API serves the structured JSON document and the analysis artifacts directly;
+The API serves the structured JSON document written by the analysis pipeline;
 these models describe the documented shape without changing the payloads. Where a
 value is a passthrough document rather than a stable schema, the model keeps the
 known fields typed and allows the rest through.
@@ -38,13 +38,6 @@ class Counts(BaseModel):
     susceptibility_results: int
 
 
-class SummaryCounts(BaseModel):
-    total: int
-    by_family: dict[str, int]
-    by_severity: dict[str, int]
-    by_detector: dict[str, int]
-
-
 class ScopeUnit(BaseModel):
     unit: str
     label: str
@@ -55,12 +48,9 @@ class MetadataResponse(BaseModel):
     counts: Counts
     date_range: DateRange
     data_as_of: str | None
-    age_band_edges: list[float]
     settings: dict[str, Any]
     scopes: dict[str, list[ScopeUnit]]
     periods: list[str]
-    deviation_summary: SummaryCounts
-    outlier_summary: SummaryCounts
 
 
 # --- patients and wards ----------------------------------------------------
@@ -113,7 +103,6 @@ class WardCultureIsolate(BaseModel):
     organism: str
     quantity: str | None
     flags: IsolateFlags
-    n_resistant_classes: int
     susceptibility: dict[str, str]
 
 
@@ -147,34 +136,19 @@ class PatientWardResponse(BaseModel):
 # --- ward summary ----------------------------------------------------------
 
 
-class FlagRate(BaseModel):
-    n: int
-    n_pos: int
-    rate: float
-    marker_antibiotic_codes: list[str]
-
-
-class WardOrganism(BaseModel):
-    organism: str
+class WardCounts(BaseModel):
+    patients: int
+    cultures: int
     isolates: int
-    share: float
 
 
 class WardSummary(BaseModel):
-    model_config = ConfigDict(extra="allow")
-
     ward_code: str
     ward_fi: str | None
     ward_en: str | None
     ward_type: str | None
     institution: str | None
-    date_range: DateRange
-    counts: Counts
-    cultures_by_specimen: dict[str, int]
-    cultures_by_result: dict[str, int]
-    organisms: list[WardOrganism]
-    flag_rates_by_organism: dict[str, dict[str, FlagRate]]
-    basis: str
+    counts: WardCounts
     data_as_of: str | None = None
 
 
@@ -205,10 +179,10 @@ class HistoryResponse(BaseModel):
 class AntibioticInfo(BaseModel):
     antibiotic: str
     antibiotic_code: str
+    antibiotic_fi: str | None = None
     antibiotic_class: str = Field(alias="class")
     reported_for: str
     role: str
-    marker_flags: list[str]
 
 
 class AntibioticsResponse(BaseModel):
@@ -271,29 +245,3 @@ class RecommendationsResponse(BaseModel):
     options: list[RecommendationOption]
     excluded: list[Exclusion]
     limitations: list[str]
-
-
-# --- data quality logs -----------------------------------------------------
-
-
-class DeviationRecord(BaseModel):
-    family: str
-    detector: str
-    unit_type: str
-    unit_key: str
-    metric: str | None
-    expected: str | None
-    observed: str | None
-    threshold: str | None
-    severity: str
-    detail: dict[str, Any]
-
-
-class DeviationsResponse(BaseModel):
-    n: int
-    deviations: list[DeviationRecord]
-
-
-class OutliersResponse(BaseModel):
-    n: int
-    outliers: list[DeviationRecord]

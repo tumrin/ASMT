@@ -1,13 +1,11 @@
 [project]
 name = "resistance-api"
 version = "0.1.0"
-description = "FastAPI serving layer over the analysis artifacts. Does not import the pipeline."
+description = "FastAPI serving layer over the analysis artifact. Does not import the pipeline."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi",
-    "polars",
     "pydantic",
-    "resistance-core",
     "uvicorn",
 ]
 
