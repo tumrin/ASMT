@@ -34,6 +34,20 @@ npm run build         # production build
 npm run preview       # serve the production build
 ```
 
+### Icons
+
+Use Iconify's Svelte component with individual MDI icon imports. This bundles only
+the icons used and does not fetch icon data at runtime:
+
+```svelte
+<script lang="ts">
+  import Icon from '@iconify/svelte';
+  import home from '@iconify-icons/mdi/home';
+</script>
+
+<Icon icon={home} />
+```
+
 The views call the backend API, so start it first (see Development in
 `server/README.md`); it serves on `http://127.0.0.1:8000`. The frontend fetches
 `/api/*`, and the Vite server (`npm run dev` and `npm run preview`) proxies those
