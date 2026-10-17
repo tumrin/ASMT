@@ -192,6 +192,35 @@ The data directory defaults to the nearest ancestor holding `patients.csv`, or t
 ancestor's `data/` subdirectory. Override it with `--data-dir` or the
 `RESISTANCE_DATA_DIR` environment variable.
 
+## Development
+
+Run the backend locally from `server/`:
+
+```bash
+uv sync                                  # once, and after dependency changes
+uv run resistance-analysis --out output  # writes the artifacts to output/
+uv run resistance-api                    # serves them on http://127.0.0.1:8000
+```
+
+Open `http://127.0.0.1:8000/docs` for the interactive OpenAPI docs. The API loads the
+artifacts once at startup, so restart it after you rerun the analysis. It has no
+auto-reload. If you write the artifacts somewhere other than `output/`, point the API
+at them with `--dataset`, `--analytics`, `--deviations` and `--outliers`.
+
+Before you push, run the tests, lint and type check:
+
+```bash
+uv run pytest
+uv run pytest tests/test_tiers.py::test_name   # single test
+uv run ruff check . && uv run ruff format .
+uv run ty check
+```
+
+Tests use a tiny dataset with deliberately injected anomalies
+(`tests/conftest.py::small_frames`), built against `load.SCHEMAS`. When you add a
+deviation detector, extend that fixture. The real dataset is self-consistent, so the
+consistency checks find nothing on it.
+
 ## Layout
 
 A `uv` workspace of three packages: analysis writes the artifacts, the API reads them.
