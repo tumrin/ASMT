@@ -1,313 +1,322 @@
 <script lang="ts">
     import { onMount } from "svelte";
 
-    type Sex = "F" | "M";
-    type TrafficLight = "green" | "yellow" | "red" | "none";
+    type PatientListItem = {
+        patient_id: string;
+        sex: string;
+        birth_year: number;
+        home_area: string;
+        wards: string[];
+    };
 
     type PatientSummary = {
         patient_id: string;
-        sex: Sex;
+        sex: string;
         birth_year: number;
         home_area: string;
-        ward: string;
-        ward_code: string;
-        admission_date?: string;
+        wards: string[];
     };
 
-    type CultureFinding = {
-        culture_id: string;
-        sample_date: string;
-        specimen: string;
-        result: string;
+    type WardIsolate = {
+        isolate_id: string;
+        isolate_no: number;
         organism: string;
-        flags: string[];
+        quantity: string | null;
+        flags: {
+            esbl: number;
+            mrsa: number;
+            vre: number;
+            cpe: number;
+        };
         susceptibility: Record<string, string>;
     };
 
-    type Recommendation = {
+    type WardCulture = {
+        culture_id: string;
+        sample_date: string;
+        iso_year: number;
+        iso_week: number;
+        age_years: number;
+        specimen: string;
+        result: string;
+        n_isolates: number;
+        days_since_admission: number | null;
+        isolates: WardIsolate[];
+    };
+
+    type WardDetail = {
+        ward_code: string;
+        ward_fi: string | null;
+        ward_en: string | null;
+        ward_type: string | null;
+        institution: string | null;
+        cultures: WardCulture[];
+    };
+
+    type HistoryEntry = {
+        isolate_id: string;
+        culture_id: string;
+        organism: string;
+        specimen: string;
+        ward_code: string | null;
+        sample_date: string | null;
+        days_ago: number | null;
+        flags: {
+            esbl: number;
+            mrsa: number;
+            vre: number;
+            cpe: number;
+        };
+        susceptibility: Record<string, string>;
+    };
+
+    type RecommendationOption = {
         antibiotic: string;
-        susceptibility_rate: number | null;
-        traffic_light: TrafficLight;
+        antibiotic_code: string;
+        class: string;
+        reported_for: string;
+        role: string;
         n: number;
-        source: string;
-        note: string;
+        n_s: number;
+        susceptibility_rate: number | null;
+        ci_low: number | null;
+        ci_high: number | null;
+        traffic_light: string;
+        source_scope: string;
+        source_unit: string;
+        source_period: string;
     };
 
-    type PatientDetail = {
-        patient_id: string;
-        sex: Sex;
-        birth_year: number;
-        home_area: string;
-        current_ward: string;
-        admission_date: string;
-        cultures: CultureFinding[];
-        recommendations: Recommendation[];
+    type RecommendationResponse = {
+        scope: string;
+        unit: string;
+        organism: string;
+        specimen: string;
+        data_as_of: string | null;
+        options: RecommendationOption[];
+        excluded: Array<{ antibiotic: string; reason: string; detail: string }>;
+        limitations: string[];
     };
 
-    const mockPatients: PatientSummary[] = [
-        {
-            patient_id: "PT-1001",
-            sex: "F",
-            birth_year: 1988,
-            home_area: "North",
-            ward: "Internal Medicine A",
-            ward_code: "MED-A",
-            admission_date: "2026-10-01",
-        },
-        {
-            patient_id: "PT-1002",
-            sex: "M",
-            birth_year: 1974,
-            home_area: "South",
-            ward: "Surgery",
-            ward_code: "SURG",
-            admission_date: "2026-09-26",
-        },
-        {
-            patient_id: "PT-1003",
-            sex: "F",
-            birth_year: 1967,
-            home_area: "North",
-            ward: "Urology",
-            ward_code: "URO",
-            admission_date: "2026-10-05",
-        },
-    ];
-
-    const mockDetails: Record<string, PatientDetail> = {
-        "PT-1001": {
-            patient_id: "PT-1001",
-            sex: "F",
-            birth_year: 1988,
-            home_area: "North",
-            current_ward: "Internal Medicine A",
-            admission_date: "2026-10-01",
-            cultures: [
-                {
-                    culture_id: "C-1104",
-                    sample_date: "2026-10-08",
-                    specimen: "urine",
-                    result: "positive",
-                    organism: "Escherichia coli",
-                    flags: ["ESBL"],
-                    susceptibility: {
-                        ampicillin: "R",
-                        mecillinam: "S",
-                        trimethoprim: "R",
-                        nitrofurantoin: "S",
-                    },
-                },
-                {
-                    culture_id: "C-1152",
-                    sample_date: "2026-10-12",
-                    specimen: "blood",
-                    result: "positive",
-                    organism: "Staphylococcus aureus",
-                    flags: ["MRSA"],
-                    susceptibility: {
-                        vancomycin: "S",
-                        clindamycin: "R",
-                        ciprofloxacin: "R",
-                    },
-                },
-            ],
-            recommendations: [
-                {
-                    antibiotic: "mecillinam",
-                    susceptibility_rate: 92,
-                    traffic_light: "green",
-                    n: 84,
-                    source: "ward / last4w",
-                    note: "Best match for urine E. coli in this ward.",
-                },
-                {
-                    antibiotic: "nitrofurantoin",
-                    susceptibility_rate: 88,
-                    traffic_light: "green",
-                    n: 71,
-                    source: "hospital / annual:2026",
-                    note: "Useful urinary option with high cumulative susceptibility.",
-                },
-                {
-                    antibiotic: "trimethoprim",
-                    susceptibility_rate: 52,
-                    traffic_light: "red",
-                    n: 63,
-                    source: "hospital / last4w",
-                    note: "Not recommended because this isolate has prior resistance.",
-                },
-            ],
-        },
-        "PT-1002": {
-            patient_id: "PT-1002",
-            sex: "M",
-            birth_year: 1974,
-            home_area: "South",
-            current_ward: "Surgery",
-            admission_date: "2026-09-26",
-            cultures: [
-                {
-                    culture_id: "C-2103",
-                    sample_date: "2026-09-28",
-                    specimen: "wound",
-                    result: "positive",
-                    organism: "Pseudomonas aeruginosa",
-                    flags: ["CPE"],
-                    susceptibility: {
-                        piperacillin_tazobactam: "S",
-                        ciprofloxacin: "R",
-                        meropenem: "S",
-                    },
-                },
-            ],
-            recommendations: [
-                {
-                    antibiotic: "meropenem",
-                    susceptibility_rate: 88,
-                    traffic_light: "green",
-                    n: 59,
-                    source: "hospital / annual:2026",
-                    note: "Highest cumulative activity against this organism.",
-                },
-                {
-                    antibiotic: "piperacillin-tazobactam",
-                    susceptibility_rate: 74,
-                    traffic_light: "yellow",
-                    n: 45,
-                    source: "ward / annual:2026",
-                    note: "Reasonable compromise option, subject to local susceptibility.",
-                },
-            ],
-        },
-        "PT-1003": {
-            patient_id: "PT-1003",
-            sex: "F",
-            birth_year: 1967,
-            home_area: "North",
-            current_ward: "Urology",
-            admission_date: "2026-10-05",
-            cultures: [
-                {
-                    culture_id: "C-3011",
-                    sample_date: "2026-10-07",
-                    specimen: "urine",
-                    result: "positive",
-                    organism: "Escherichia coli",
-                    flags: [],
-                    susceptibility: {
-                        ampicillin: "S",
-                        mecillinam: "S",
-                        trimethoprim: "S",
-                        nitrofurantoin: "S",
-                    },
-                },
-            ],
-            recommendations: [
-                {
-                    antibiotic: "nitrofurantoin",
-                    susceptibility_rate: 93,
-                    traffic_light: "green",
-                    n: 77,
-                    source: "hospital / last4w",
-                    note: "Strong local activity for uncomplicated urinary E. coli.",
-                },
-                {
-                    antibiotic: "mecillinam",
-                    susceptibility_rate: 90,
-                    traffic_light: "green",
-                    n: 82,
-                    source: "hospital / annual:2026",
-                    note: "Another appropriate urinary therapy option.",
-                },
-            ],
-        },
+    type RecommendationGroup = {
+        organism: string;
+        specimen: string;
+        options: RecommendationOption[];
     };
 
-    let patients = $state<PatientSummary[]>([]);
+    const API_BASE = "http://127.0.0.1:8000";
+
+    let patientList = $state<PatientListItem[]>([]);
+    let patientSummary = $state<PatientSummary | null>(null);
     let selectedPatientId = $state<string>("");
+    let selectedWard = $state<string>("");
+    let wardDocument = $state<WardDetail | null>(null);
+    let history = $state<HistoryEntry[]>([]);
+    let recommendationGroups = $state<RecommendationGroup[]>([]);
     let status = $state<string>("Loading patient list...");
     let statusTone = $state<"info" | "error">("info");
     let searchTerm = $state<string>("");
-
-    const trafficLightMeta: Record<
-        TrafficLight,
-        { label: string; color: string }
-    > = {
-        green: { label: "Green", color: "#1f9d61" },
-        yellow: { label: "Yellow", color: "#d29a00" },
-        red: { label: "Red", color: "#cf3b3b" },
-        none: { label: "None", color: "#5b6470" },
-    };
+    let loading = $state(false);
+    let selectionVersion = 0;
 
     const filteredPatients = $derived.by(() => {
         const term = searchTerm.trim().toLowerCase();
-        if (!term) return patients;
-        return patients.filter((patient) => {
+        if (!term) return patientList;
+
+        return patientList.filter((patient) => {
+            const wardText = patient.wards.join(" ").toLowerCase();
             return (
                 patient.patient_id.toLowerCase().includes(term) ||
-                patient.ward.toLowerCase().includes(term) ||
+                wardText.includes(term) ||
                 patient.home_area.toLowerCase().includes(term)
             );
         });
     });
 
-    const selectedPatient = $derived.by(() => {
-        const patient = patients.find(
-            (item) => item.patient_id === selectedPatientId,
-        );
-        if (patient) {
-            return patient;
+    const uniqueOrganismSpecimens = $derived.by(() => {
+        const map = new Map<string, { organism: string; specimen: string }>();
+        for (const entry of history) {
+            const key = `${entry.organism}::${entry.specimen}`;
+            if (!map.has(key)) {
+                map.set(key, {
+                    organism: entry.organism,
+                    specimen: entry.specimen,
+                });
+            }
         }
-        return patients[0] ?? null;
-    });
-
-    const selectedDetail = $derived.by(() => {
-        const patientId = selectedPatient?.patient_id ?? selectedPatientId;
-        return mockDetails[patientId] ?? null;
+        return [...map.values()];
     });
 
     const age = (birthYear: number) => new Date().getFullYear() - birthYear;
 
+    function flagList(flags: {
+        esbl: number;
+        mrsa: number;
+        vre: number;
+        cpe: number;
+    }): string[] {
+        const list: string[] = [];
+        if (flags.esbl) list.push("ESBL");
+        if (flags.mrsa) list.push("MRSA");
+        if (flags.vre) list.push("VRE");
+        if (flags.cpe) list.push("CPE");
+        return list;
+    }
+
+    async function fetchJson<T>(url: string): Promise<T> {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Request failed (${response.status}) for ${url}`);
+        }
+        return (await response.json()) as T;
+    }
+
     async function loadPatientList() {
+        loading = true;
         try {
-            const response = await fetch("http://127.0.0.1:8000/patients");
-            if (!response.ok) {
-                throw new Error(`Backend responded with ${response.status}`);
-            }
-            const payload = (await response.json()) as {
-                items?: PatientSummary[];
-            };
-            const items =
-                Array.isArray(payload.items) && payload.items.length > 0
-                    ? payload.items
-                    : mockPatients;
-            patients = items;
-            status = "Live backend data is available.";
+            const payload = await fetchJson<{
+                n: number;
+                patients: PatientListItem[];
+            }>(`${API_BASE}/patients`);
+            patientList = payload.patients ?? [];
+            status = `Loaded ${patientList.length} patients.`;
             statusTone = "info";
+
+            if (patientList.length > 0 && !selectedPatientId) {
+                selectedPatientId = patientList[0].patient_id;
+                await selectPatient(patientList[0].patient_id);
+            }
         } catch (error) {
-            console.warn(
-                "Patient endpoint unavailable yet. Showing mock patient data.",
-                error,
-            );
-            patients = mockPatients;
-            status =
-                "Backend endpoint is not implemented yet; showing sample patient data.";
+            console.error(error);
+            status = "Failed to load patients from the backend.";
             statusTone = "error";
+        } finally {
+            loading = false;
+        }
+    }
+
+    async function loadWardDocument(patientId: string, wardCode: string) {
+        const payload = await fetchJson<{
+            patient: PatientSummary;
+            ward: WardDetail;
+        }>(`${API_BASE}/patients/${patientId}/wards/${wardCode}`);
+        return payload.ward;
+    }
+
+    async function loadHistory(patientId: string) {
+        const payload = await fetchJson<{
+            patient_id: string;
+            organism: string | null;
+            history: HistoryEntry[];
+        }>(`${API_BASE}/patients/${patientId}/history`);
+        return payload.history ?? [];
+    }
+
+    async function loadRecommendationsForFinding(
+        wardCode: string,
+        organism: string,
+        specimen: string,
+    ) {
+        const url = `${API_BASE}/recommendations?scope=ward&unit=${encodeURIComponent(wardCode)}&organism=${encodeURIComponent(organism)}&specimen=${encodeURIComponent(specimen)}&period=last4w`;
+        const payload = await fetchJson<RecommendationResponse>(url);
+        return {
+            organism,
+            specimen,
+            options: payload.options ?? [],
+        } satisfies RecommendationGroup;
+    }
+
+    async function refreshRecommendations() {
+        const patientId = selectedPatientId;
+        const wardCode = selectedWard;
+        if (
+            !selectedPatientId ||
+            !selectedWard ||
+            uniqueOrganismSpecimens.length === 0
+        ) {
+            recommendationGroups = [];
+            return;
         }
 
-        if (!selectedPatientId && patients.length > 0) {
-            selectedPatientId = patients[0].patient_id;
+        const findings = await Promise.all(
+            uniqueOrganismSpecimens.map(({ organism, specimen }) =>
+                loadRecommendationsForFinding(selectedWard, organism, specimen),
+            ),
+        );
+
+        if (selectedPatientId !== patientId || selectedWard !== wardCode)
+            return;
+        recommendationGroups = findings.filter(
+            (item) => item.options.length > 0,
+        );
+    }
+
+    async function selectPatient(patientId: string) {
+        const requestVersion = ++selectionVersion;
+        selectedPatientId = patientId;
+        searchTerm = "";
+        patientSummary = null;
+        selectedWard = "";
+        wardDocument = null;
+        history = [];
+        recommendationGroups = [];
+        loading = true;
+        try {
+            const summary = await fetchJson<PatientSummary>(
+                `${API_BASE}/patients/${patientId}`,
+            );
+            if (requestVersion !== selectionVersion) return;
+            patientSummary = summary;
+
+            const wardChoices = summary.wards ?? [];
+            selectedWard = wardChoices[0] ?? "";
+
+            const [ward, patientHistory] = await Promise.all([
+                selectedWard ? loadWardDocument(patientId, selectedWard) : null,
+                loadHistory(patientId),
+            ]);
+            if (requestVersion !== selectionVersion) return;
+            wardDocument = ward;
+            history = patientHistory;
+            await refreshRecommendations();
+            status = `Loaded patient ${patientId}.`;
+            statusTone = "info";
+        } catch (error) {
+            if (requestVersion !== selectionVersion) return;
+            console.error(error);
+            status = `Unable to load patient ${patientId}.`;
+            statusTone = "error";
+        } finally {
+            if (requestVersion === selectionVersion) loading = false;
+        }
+    }
+
+    async function selectWard(wardCode: string) {
+        const patientId = selectedPatientId;
+        selectedWard = wardCode;
+        wardDocument = null;
+        loading = true;
+        try {
+            const ward = await loadWardDocument(patientId, wardCode);
+            if (selectedPatientId !== patientId || selectedWard !== wardCode)
+                return;
+            wardDocument = ward;
+            await refreshRecommendations();
+        } catch (error) {
+            if (selectedPatientId !== patientId || selectedWard !== wardCode)
+                return;
+            console.error(error);
+            status = `Unable to load ward ${wardCode}.`;
+            statusTone = "error";
+        } finally {
+            if (selectedPatientId === patientId && selectedWard === wardCode) {
+                loading = false;
+            }
         }
     }
 
     onMount(() => {
-        loadPatientList();
-    });
-
-    $effect(() => {
-        if (!selectedPatientId && patients.length > 0) {
-            selectedPatientId = patients[0].patient_id;
-        }
+        void loadPatientList();
     });
 </script>
 
@@ -320,7 +329,7 @@
         <div>
             <h1>Patient view</h1>
             <p>
-                Review patient details, recent cultures and local antibiotic
+                Review patient details, recent cultures and local
                 recommendations.
             </p>
         </div>
@@ -328,7 +337,7 @@
     </header>
 
     <div class={`status-banner ${statusTone}`}>
-        {status}
+        {loading ? "Loading patient data..." : status}
     </div>
 
     <div class="layout">
@@ -351,10 +360,10 @@
                         <li>
                             <button
                                 type="button"
-                                class:active={selectedPatient?.patient_id ===
+                                class:active={selectedPatientId ===
                                     patient.patient_id}
                                 onclick={() =>
-                                    (selectedPatientId = patient.patient_id)}
+                                    void selectPatient(patient.patient_id)}
                             >
                                 <div class="patient-id">
                                     {patient.patient_id}
@@ -362,7 +371,9 @@
                                 <div class="patient-meta">
                                     {patient.sex} · {age(patient.birth_year)} yrs
                                 </div>
-                                <div class="patient-meta">{patient.ward}</div>
+                                <div class="patient-meta">
+                                    {patient.wards.join(", ") || "No ward data"}
+                                </div>
                             </button>
                         </li>
                     {/each}
@@ -371,78 +382,195 @@
         </aside>
 
         <main class="panel patient-detail-panel">
-            {#if selectedPatient && selectedDetail}
+            {#if patientSummary}
                 <section class="summary-grid">
                     <div class="summary-card">
                         <span class="label">Patient ID</span>
-                        <strong>{selectedDetail.patient_id}</strong>
+                        <strong>{patientSummary.patient_id}</strong>
                     </div>
                     <div class="summary-card">
                         <span class="label">Sex</span>
-                        <strong>{selectedDetail.sex}</strong>
+                        <strong>{patientSummary.sex}</strong>
                     </div>
                     <div class="summary-card">
                         <span class="label">Age</span>
-                        <strong>{age(selectedDetail.birth_year)} years</strong>
+                        <strong>{age(patientSummary.birth_year)} years</strong>
                     </div>
                     <div class="summary-card">
                         <span class="label">Home area</span>
-                        <strong>{selectedDetail.home_area}</strong>
+                        <strong>{patientSummary.home_area}</strong>
                     </div>
                     <div class="summary-card">
-                        <span class="label">Current ward</span>
-                        <strong>{selectedDetail.current_ward}</strong>
+                        <span class="label">Wards</span>
+                        <strong>{patientSummary.wards.join(", ") || "—"}</strong
+                        >
                     </div>
                     <div class="summary-card">
-                        <span class="label">Admission</span>
-                        <strong>{selectedDetail.admission_date}</strong>
+                        <span class="label">Selected ward</span>
+                        <strong>{selectedWard || "—"}</strong>
                     </div>
                 </section>
 
+                {#if patientSummary.wards.length > 0}
+                    <div class="ward-picker">
+                        <label for="ward-select">Ward</label>
+                        <select
+                            id="ward-select"
+                            bind:value={selectedWard}
+                            onchange={() => void selectWard(selectedWard)}
+                        >
+                            {#each patientSummary.wards as wardCode}
+                                <option value={wardCode}>{wardCode}</option>
+                            {/each}
+                        </select>
+                    </div>
+                {/if}
+
+                {#if wardDocument}
+                    <section class="section-block">
+                        <div class="section-header">
+                            <h2>Ward cultures</h2>
+                            <p>
+                                {wardDocument.ward_fi ??
+                                    wardDocument.ward_en ??
+                                    wardDocument.ward_code}
+                            </p>
+                        </div>
+                        <div class="table-wrap">
+                            <table>
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Specimen</th>
+                                        <th>Result</th>
+                                        <th>Isolates</th>
+                                        <th>Resistance markers</th>
+                                        <th>Susceptibility</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {#each wardDocument.cultures as culture}
+                                        <tr>
+                                            <td>{culture.sample_date}</td>
+                                            <td>{culture.specimen}</td>
+                                            <td>{culture.result}</td>
+                                            <td>
+                                                {#if culture.isolates.length === 0}
+                                                    <span class="muted">—</span>
+                                                {:else}
+                                                    {#each culture.isolates as isolate}
+                                                        <div
+                                                            class="isolate-line"
+                                                        >
+                                                            <strong
+                                                                >{isolate.organism}</strong
+                                                            >
+                                                            <span
+                                                                >{isolate.isolate_id}</span
+                                                            >
+                                                        </div>
+                                                    {/each}
+                                                {/if}
+                                            </td>
+                                            <td>
+                                                {#if culture.isolates.length === 0}
+                                                    <span class="muted"
+                                                        >None</span
+                                                    >
+                                                {:else}
+                                                    {#each culture.isolates as isolate}
+                                                        {#each flagList(isolate.flags) as flag}
+                                                            <span class="flag"
+                                                                >{flag}</span
+                                                            >
+                                                        {/each}
+                                                    {/each}
+                                                {/if}
+                                            </td>
+                                            <td>
+                                                {#if culture.isolates.length === 0}
+                                                    <span class="muted">—</span>
+                                                {:else}
+                                                    {#each culture.isolates as isolate}
+                                                        <div
+                                                            class="iso-details"
+                                                        >
+                                                            {#each Object.entries(isolate.susceptibility) as [agent, result]}
+                                                                <span
+                                                                    class="susceptibility-pill {result.toLowerCase()}"
+                                                                >
+                                                                    {agent}: {result}
+                                                                </span>
+                                                            {/each}
+                                                        </div>
+                                                    {/each}
+                                                {/if}
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                {/if}
+
                 <section class="section-block">
                     <div class="section-header">
-                        <h2>Culture history</h2>
+                        <h2>Patient history</h2>
                     </div>
                     <div class="table-wrap">
                         <table>
                             <thead>
                                 <tr>
                                     <th>Date</th>
-                                    <th>Specimen</th>
                                     <th>Organism</th>
-                                    <th>Result</th>
-                                    <th>Resistance markers</th>
+                                    <th>Specimen</th>
+                                    <th>Ward</th>
+                                    <th>Flags</th>
                                     <th>Susceptibility</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {#each selectedDetail.cultures as culture}
+                                {#if history.length === 0}
                                     <tr>
-                                        <td>{culture.sample_date}</td>
-                                        <td>{culture.specimen}</td>
-                                        <td>{culture.organism}</td>
-                                        <td>{culture.result}</td>
-                                        <td>
-                                            {#if culture.flags.length === 0}
-                                                <span class="muted">None</span>
-                                            {:else}
-                                                {#each culture.flags as flag}
-                                                    <span class="flag"
-                                                        >{flag}</span
+                                        <td colspan="6"
+                                            ><span class="empty-state"
+                                                >No previous culture history
+                                                available.</span
+                                            ></td
+                                        >
+                                    </tr>
+                                {:else}
+                                    {#each history as item}
+                                        <tr>
+                                            <td>{item.sample_date ?? "—"}</td>
+                                            <td>{item.organism}</td>
+                                            <td>{item.specimen}</td>
+                                            <td>{item.ward_code ?? "—"}</td>
+                                            <td>
+                                                {#if flagList(item.flags).length === 0}
+                                                    <span class="muted"
+                                                        >None</span
+                                                    >
+                                                {:else}
+                                                    {#each flagList(item.flags) as flag}
+                                                        <span class="flag"
+                                                            >{flag}</span
+                                                        >
+                                                    {/each}
+                                                {/if}
+                                            </td>
+                                            <td>
+                                                {#each Object.entries(item.susceptibility) as [agent, result]}
+                                                    <span
+                                                        class="susceptibility-pill {result.toLowerCase()}"
+                                                        >{agent}: {result}</span
                                                     >
                                                 {/each}
-                                            {/if}
-                                        </td>
-                                        <td>
-                                            {#each Object.entries(culture.susceptibility) as [agent, outcome]}
-                                                <span
-                                                    class="susceptibility-pill {outcome.toLowerCase()}"
-                                                    >{agent}: {outcome}</span
-                                                >
-                                            {/each}
-                                        </td>
-                                    </tr>
-                                {/each}
+                                            </td>
+                                        </tr>
+                                    {/each}
+                                {/if}
                             </tbody>
                         </table>
                     </div>
@@ -452,50 +580,63 @@
                     <div class="section-header">
                         <h2>Empiric recommendations</h2>
                         <p>
-                            Decision support only; history is shown for context
-                            and does not affect the recommendation.
+                            Decision support only. The recommendation is based
+                            on the local ward antibiogram and the patient's
+                            expected pathogen/specimen pairing.
                         </p>
                     </div>
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Antibiotic</th>
-                                    <th>Rate</th>
-                                    <th>n</th>
-                                    <th>Traffic light</th>
-                                    <th>Source</th>
-                                    <th>Note</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {#each selectedDetail.recommendations as recommendation}
-                                    <tr>
-                                        <td>{recommendation.antibiotic}</td>
-                                        <td>
-                                            {recommendation.susceptibility_rate ==
-                                            null
-                                                ? "–"
-                                                : `${recommendation.susceptibility_rate}%`}
-                                        </td>
-                                        <td>{recommendation.n}</td>
-                                        <td>
-                                            <span
-                                                class="traffic-pill"
-                                                style={`background:${trafficLightMeta[recommendation.traffic_light].color}`}
-                                            >
-                                                {trafficLightMeta[
-                                                    recommendation.traffic_light
-                                                ].label}
-                                            </span>
-                                        </td>
-                                        <td>{recommendation.source}</td>
-                                        <td>{recommendation.note}</td>
-                                    </tr>
-                                {/each}
-                            </tbody>
-                        </table>
-                    </div>
+
+                    {#if recommendationGroups.length === 0}
+                        <p class="empty-state">
+                            No recommendation data available for the current
+                            patient findings.
+                        </p>
+                    {:else}
+                        {#each recommendationGroups as group}
+                            <div class="recommendation-group">
+                                <h3>{group.organism} · {group.specimen}</h3>
+                                <div class="table-wrap">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Antibiotic</th>
+                                                <th>Rate</th>
+                                                <th>n</th>
+                                                <th>Traffic light</th>
+                                                <th>Source</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {#each group.options as option}
+                                                <tr>
+                                                    <td>{option.antibiotic}</td>
+                                                    <td
+                                                        >{option.susceptibility_rate ==
+                                                        null
+                                                            ? "–"
+                                                            : `${(option.susceptibility_rate * 100).toFixed(1)}%`}</td
+                                                    >
+                                                    <td>{option.n}</td>
+                                                    <td>
+                                                        <span
+                                                            class="traffic-pill"
+                                                            style={`background:${option.traffic_light === "green" ? "#1f9d61" : option.traffic_light === "yellow" ? "#d29a00" : option.traffic_light === "red" ? "#cf3b3b" : "#5b6470"}`}
+                                                        >
+                                                            {option.traffic_light}
+                                                        </span>
+                                                    </td>
+                                                    <td
+                                                        >{option.source_scope} /
+                                                        {option.source_unit} / {option.source_period}</td
+                                                    >
+                                                </tr>
+                                            {/each}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        {/each}
+                    {/if}
                 </section>
             {:else}
                 <p class="empty-state">
@@ -526,8 +667,8 @@
 
     .topbar {
         display: flex;
-        align-items: center;
         justify-content: space-between;
+        align-items: center;
         gap: 1rem;
         margin-bottom: 1rem;
     }
@@ -538,40 +679,40 @@
     }
 
     .topbar p {
-        margin: 0.45rem 0 0;
-        color: #4f6278;
+        margin: 0.4rem 0 0;
+        color: #52657f;
     }
 
     .nav-link {
-        color: #123b7a;
         text-decoration: none;
-        font-weight: 600;
-        padding: 0.7rem 1rem;
+        color: #123b7a;
+        background: #eaf1ff;
         border-radius: 999px;
-        background: #e8f0ff;
+        padding: 0.7rem 1rem;
+        font-weight: 600;
     }
 
     .status-banner {
-        margin-bottom: 1.5rem;
+        margin-bottom: 1.25rem;
         padding: 0.8rem 1rem;
         border-radius: 10px;
-        font-weight: 600;
         border: 1px solid #dfe7f3;
+        font-weight: 600;
     }
 
     .status-banner.info {
         background: #edf7ff;
-        color: #174f8d;
+        color: #164a87;
     }
 
     .status-banner.error {
         background: #fff3f3;
-        color: #8d2c2c;
+        color: #8b2e2e;
     }
 
     .layout {
         display: grid;
-        grid-template-columns: minmax(270px, 340px) minmax(0, 1fr);
+        grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
         gap: 1.25rem;
         align-items: start;
     }
@@ -580,7 +721,7 @@
         background: #ffffff;
         border: 1px solid #dfe7f3;
         border-radius: 16px;
-        box-shadow: 0 8px 22px rgba(34, 63, 94, 0.06);
+        box-shadow: 0 8px 22px rgba(16, 45, 73, 0.05);
     }
 
     .patient-list-panel {
@@ -595,16 +736,19 @@
     }
 
     .panel-header h2,
-    .section-header h2 {
+    .section-header h2,
+    .recommendation-group h3 {
         margin: 0;
     }
 
-    .panel-header input {
+    .panel-header input,
+    .ward-picker select {
         width: 100%;
         padding: 0.7rem 0.8rem;
-        border: 1px solid #d8e2f0;
         border-radius: 10px;
+        border: 1px solid #d8e2f0;
         font: inherit;
+        background: white;
     }
 
     .patient-list {
@@ -618,9 +762,9 @@
     .patient-list button {
         width: 100%;
         text-align: left;
-        padding: 0.85rem 0.9rem;
-        border: 1px solid #dfe7f3;
+        padding: 0.9rem 0.9rem;
         border-radius: 12px;
+        border: 1px solid #dfe7f3;
         background: #f8fbff;
         cursor: pointer;
         transition: all 0.15s ease;
@@ -628,12 +772,12 @@
 
     .patient-list button:hover,
     .patient-list button.active {
-        border-color: #7ca7ff;
         background: #edf4ff;
+        border-color: #7ca7ff;
     }
 
     .patient-id {
-        font-size: 1.05rem;
+        font-size: 1.02rem;
         font-weight: 700;
     }
 
@@ -649,37 +793,50 @@
 
     .summary-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
         gap: 0.9rem;
         margin-bottom: 1.2rem;
     }
 
     .summary-card {
         padding: 0.9rem 1rem;
-        border: 1px solid #dfe7f3;
         border-radius: 12px;
         background: #f9fbff;
+        border: 1px solid #dfe7f3;
     }
 
     .label {
         display: block;
-        font-size: 0.75rem;
         text-transform: uppercase;
         letter-spacing: 0.06em;
+        font-size: 0.72rem;
         color: #607087;
         margin-bottom: 0.3rem;
     }
 
+    .ward-picker {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+
+    .ward-picker label {
+        font-weight: 600;
+        color: #3f526d;
+    }
+
     .section-block {
-        margin-top: 1.2rem;
+        margin-top: 1.4rem;
     }
 
     .section-header {
         display: flex;
-        justify-content: space-between;
         align-items: end;
+        justify-content: space-between;
         gap: 1rem;
-        margin-bottom: 0.7rem;
+        margin-bottom: 0.75rem;
     }
 
     .section-header p {
@@ -700,18 +857,27 @@
 
     th,
     td {
-        padding: 0.8rem 0.7rem;
-        border-bottom: 1px solid #e5ebf4;
+        padding: 0.75rem 0.7rem;
         text-align: left;
+        border-bottom: 1px solid #e5ebf4;
         vertical-align: top;
     }
 
     th {
-        font-size: 0.8rem;
-        letter-spacing: 0.04em;
         text-transform: uppercase;
+        font-size: 0.76rem;
+        letter-spacing: 0.04em;
         color: #4f647d;
         background: #f7faff;
+    }
+
+    .isolate-line,
+    .iso-details {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem 0.45rem;
+        align-items: center;
+        margin-bottom: 0.4rem;
     }
 
     .flag,
@@ -719,50 +885,62 @@
     .traffic-pill {
         display: inline-flex;
         align-items: center;
-        padding: 0.22rem 0.5rem;
+        padding: 0.22rem 0.53rem;
         border-radius: 999px;
-        font-size: 0.76rem;
+        font-size: 0.74rem;
         font-weight: 600;
     }
 
     .flag {
         background: #edf3ff;
-        color: #203f79;
-        margin-right: 0.35rem;
-        margin-bottom: 0.2rem;
+        color: #1f4d99;
     }
 
     .susceptibility-pill {
-        margin: 0 0.3rem 0.3rem 0;
-        background: #eef4f9;
+        margin: 0 0.3rem 0.35rem 0;
+        background: #edf3f8;
         color: #213d5f;
     }
 
     .susceptibility-pill.s {
         background: #eafaf2;
-        color: #156a42;
+        color: #166a42;
     }
 
     .susceptibility-pill.r {
-        background: #fff0f0;
-        color: #9d2f2f;
+        background: #fff1f1;
+        color: #9a2f2f;
     }
 
     .traffic-pill {
         color: white;
         padding-inline: 0.7rem;
+        text-transform: capitalize;
     }
 
-    .muted {
-        color: #6c7d91;
+    .recommendation-group {
+        margin-top: 0.8rem;
+        padding: 1rem;
+        border: 1px solid #dfe7f3;
+        border-radius: 14px;
+        background: #fafcff;
+    }
+
+    .recommendation-group h3 {
+        margin-bottom: 0.8rem;
     }
 
     .empty-state {
-        padding: 1rem;
-        border: 1px dashed #cbd6e8;
+        display: inline-block;
+        padding: 0.8rem 1rem;
         border-radius: 12px;
-        color: #51657d;
+        border: 1px dashed #cbd6e8;
+        color: #5b6f86;
         background: #fafcff;
+    }
+
+    .muted {
+        color: #6d7f94;
     }
 
     @media (max-width: 920px) {
