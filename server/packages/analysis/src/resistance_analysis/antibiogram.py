@@ -38,22 +38,40 @@ def _first_isolates(
     isolates: pl.DataFrame,
     windows: dict[str, tuple[date, date]],
 ) -> pl.DataFrame:
-    """One isolate per patient x organism x specimen per period, earliest first."""
+    """First isolate per patient x organism x specimen x setting per period.
+
+    Splitting by ``ward_type`` keeps inpatient (ward) and outpatient (region) scopes
+    independent: a patient seen in both settings contributes one first isolate to each
+    instead of one setting suppressing the other. ``is_global_first`` marks the earliest
+    isolate across settings, which the hospital scope counts (spec §6.1).
+    """
     frames: list[pl.DataFrame] = []
     for label, (start, end) in windows.items():
         window = isolates.filter(
             (pl.col("sample_date") >= start) & (pl.col("sample_date") <= end)
-        )
-        picked = (
-            window.sort("sample_date", "isolate_id")
-            .group_by("patient_id", "organism", "specimen", maintain_order=True)
-            .agg(pl.col("isolate_id").first().alias("isolate_id"))
-        )
+        ).sort("sample_date", "isolate_id")
+        setting_first = window.group_by(
+            "patient_id", "organism", "specimen", "ward_type", maintain_order=True
+        ).agg(pl.col("isolate_id").first().alias("isolate_id"))
+        global_first = window.group_by(
+            "patient_id", "organism", "specimen", maintain_order=True
+        ).agg(pl.col("isolate_id").first().alias("isolate_id"))
         frames.append(
-            picked.select("isolate_id").with_columns(pl.lit(label).alias("period"))
+            setting_first.select("isolate_id").with_columns(
+                pl.col("isolate_id")
+                .is_in(global_first["isolate_id"].to_list())
+                .alias("is_global_first"),
+                pl.lit(label).alias("period"),
+            )
         )
     if not frames:
-        return pl.DataFrame(schema={"isolate_id": pl.String, "period": pl.String})
+        return pl.DataFrame(
+            schema={
+                "isolate_id": pl.String,
+                "is_global_first": pl.Boolean,
+                "period": pl.String,
+            }
+        )
     return pl.concat(frames)
 
 
@@ -102,7 +120,9 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
 
 
 def _scoped_rows(rows: pl.DataFrame) -> pl.DataFrame:
-    hospital = rows.with_columns(
+    # Ward and region count the first isolate per setting; hospital keeps the global
+    # first isolate across settings (spec §6.1).
+    hospital = rows.filter(pl.col("is_global_first")).with_columns(
         pl.lit("hospital").alias("scope"), pl.lit("-").alias("unit")
     )
     ward = rows.filter(pl.col("ward_type") == "in").with_columns(

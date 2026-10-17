@@ -42,6 +42,13 @@ is counted, ordered by `sample_date, isolate_id`. The rule is applied per period
 so a patient can contribute one isolate to each year and one to the
 last-four-weeks window.
 
+Ward and region scopes are kept independent by applying the rule per setting:
+they count the first isolate per `patient_id × organism × specimen × ward_type`,
+so a patient seen both as an inpatient and as an outpatient contributes one first
+isolate to each scope instead of one setting suppressing the other. The hospital
+scope spans settings and keeps the single global first isolate per
+`patient_id × organism × specimen`.
+
 ### Scope
 
 | Scope | Includes |

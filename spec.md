@@ -26,7 +26,7 @@ Frontend: see `frontend/README.md`.
    isolates tested S) of each antibiotic for each organism × specimen type present in
    the data. Each rate includes the number of isolates used.
    - Count the **first isolate per patient per species per specimen type per
-     period** (§6.1).
+     period** (§6.1), applied per setting for the ward and region scopes.
    - Report a rate only when the cell has **at least 30 isolates**; smaller cells are
      returned with their `n` and a null rate.
 2. **Antibiogram view.** A matrix of organisms (rows) × antibiotics (columns).
@@ -97,6 +97,10 @@ name.
 Within each period, only the first isolate per `patient_id × organism × specimen` is
 counted, ordered by `sample_date, isolate_id`. The rule is applied per period, so a
 patient can contribute one isolate to each year and one to the last-four-weeks window.
+For the `ward` and `region` scopes the rule is applied per setting
+(`patient_id × organism × specimen × ward_type`), so inpatient and outpatient data
+never suppress each other; the `hospital` scope spans settings and keeps the single
+global first isolate.
 
 ### 6.2 Scope
 

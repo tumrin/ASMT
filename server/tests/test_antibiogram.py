@@ -218,6 +218,153 @@ def test_scope_breakdown_and_region_units() -> None:
     assert [region["unit"] for region in result.scopes["region"]] == ["Centre"]
 
 
+def test_first_isolate_rule_is_applied_per_setting() -> None:
+    isolates = [
+        # P1: outpatient isolate first, inpatient later.
+        _isolate(
+            "O1",
+            "P1",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 1),
+            "out",
+            "PHC-N",
+            "Centre",
+        ),
+        _isolate(
+            "N1",
+            "P1",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 10),
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+        # P2: inpatient isolate first, outpatient later.
+        _isolate(
+            "N2",
+            "P2",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 2),
+            "in",
+            "MED-A",
+            "East",
+        ),
+        _isolate(
+            "O2",
+            "P2",
+            "Escherichia coli",
+            "urine",
+            date(2024, 6, 11),
+            "out",
+            "PHC-N",
+            "East",
+        ),
+    ]
+    susceptibility = [
+        _result(
+            "O1",
+            "Escherichia coli",
+            "urine",
+            "ampicillin",
+            "AMP",
+            "penicillins",
+            "all",
+            True,
+            "out",
+            "PHC-N",
+            "Centre",
+        ),
+        _result(
+            "N1",
+            "Escherichia coli",
+            "urine",
+            "ampicillin",
+            "AMP",
+            "penicillins",
+            "all",
+            False,
+            "in",
+            "MED-A",
+            "Centre",
+        ),
+        _result(
+            "N2",
+            "Escherichia coli",
+            "urine",
+            "ampicillin",
+            "AMP",
+            "penicillins",
+            "all",
+            False,
+            "in",
+            "MED-A",
+            "East",
+        ),
+        _result(
+            "O2",
+            "Escherichia coli",
+            "urine",
+            "ampicillin",
+            "AMP",
+            "penicillins",
+            "all",
+            True,
+            "out",
+            "PHC-N",
+            "East",
+        ),
+    ]
+    contexts = [
+        {
+            "culture_id": "co1",
+            "patient_id": "P1",
+            "ward_type": "out",
+            "sample_date": date(2024, 6, 1),
+        },
+        {
+            "culture_id": "cn1",
+            "patient_id": "P1",
+            "ward_type": "in",
+            "sample_date": date(2024, 6, 10),
+        },
+        {
+            "culture_id": "cn2",
+            "patient_id": "P2",
+            "ward_type": "in",
+            "sample_date": date(2024, 6, 2),
+        },
+        {
+            "culture_id": "co2",
+            "patient_id": "P2",
+            "ward_type": "out",
+            "sample_date": date(2024, 6, 11),
+        },
+    ]
+    frames = _frames(isolates, susceptibility, contexts)
+    result = build_antibiogram(*frames, Settings())
+
+    # Each setting keeps its own first isolate, so neither setting suppresses the other.
+    ward = result.matrix["ward|MED-A|annual:2024"]["Escherichia coli|urine"][0]
+    assert ward["n"] == 2
+    assert ward["n_s"] == 0  # N1 and N2, both R
+
+    centre = result.matrix["region|Centre|annual:2024"]["Escherichia coli|urine"][0]
+    assert centre["n"] == 1
+    assert centre["n_s"] == 1  # O1, S
+
+    east = result.matrix["region|East|annual:2024"]["Escherichia coli|urine"][0]
+    assert east["n"] == 1
+    assert east["n_s"] == 1  # O2, S
+
+    # The hospital scope spans settings and counts one global first isolate per patient.
+    hospital = result.matrix["hospital|-|annual:2024"]["Escherichia coli|urine"][0]
+    assert hospital["n"] == 2
+    assert hospital["n_s"] == 1  # O1 (S) and N2 (R)
+
+
 def test_applicability_and_screens_are_kept_with_role() -> None:
     isolates = [
         _isolate(
