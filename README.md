@@ -1,6 +1,6 @@
 # Antimicrobial Susceptibility Monitoring Tool - JunctionxTurku2026
 
-liirum laarum
+(Insert general description of the project, challenge, etc...)
 
 ## The Challenge by Tyks Laboratories
 
@@ -12,7 +12,7 @@ Description:
 
 ## Our Project
 
-liirum laarum
+(Insert a more detailed description of our solution)
 
 ## Future plans
 
