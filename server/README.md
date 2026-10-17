@@ -23,6 +23,13 @@ cutoffs.
 
 ## Antibiogram model
 
+### Organism names
+
+Specified in `spec.md` §5.2. On load, `organism` in `isolates.csv` and `susceptibility.csv` is normalized: trim
+surrounding whitespace, lowercase, then replace each run of `.` and whitespace with
+`_` (`Escherichia coli` → `escherichia_coli`). Every output and API value uses the
+normalized name.
+
 ### Periods and first-isolate rule
 
 | Period | Window |
@@ -251,7 +258,8 @@ at import time.
 - The last-four-weeks window often has cells below 30 isolates, so it falls back to
   the annual period and then to hospital scope.
 - VRE and CPE positives are too few for stable rates.
-- Organism names are matched exactly; there is no taxonomy normalisation.
+- Organism names are matched exactly after string normalization (see Organism
+  names); there is no taxonomy normalisation.
 
 ## Columns read
 

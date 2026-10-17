@@ -79,7 +79,7 @@ def test_document_structure_and_lookup(dataset_dir, tmp_path) -> None:
     isolate = next(
         i for c in ward["cultures"] if c["culture_id"] == "C1" for i in c["isolates"]
     )
-    assert isolate["organism"] == "Escherichia coli"
+    assert isolate["organism"] == "escherichia_coli"
     assert isolate["susceptibility"]["ampicillin"] == "R"
 
     assert "ICU" not in patient["wards"]
@@ -174,13 +174,13 @@ def test_antibiogram_endpoint(dataset_dir, tmp_path) -> None:
         rows = {(row["organism"], row["specimen"]): row for row in body["organisms"]}
         ecoli_codes = {
             entry["antibiotic_code"]
-            for entry in rows[("Escherichia coli", "urine")]["antibiotics"]
+            for entry in rows[("escherichia_coli", "urine")]["antibiotics"]
         }
         assert ecoli_codes == {"AMP", "MEC"}
         # The screen agent is excluded by default.
         aureus_codes = {
             entry["antibiotic_code"]
-            for entry in rows[("Staphylococcus aureus", "blood")]["antibiotics"]
+            for entry in rows[("staphylococcus_aureus", "blood")]["antibiotics"]
         }
         assert aureus_codes == {"VAN"}
 
@@ -213,7 +213,7 @@ def test_antibiogram_endpoint(dataset_dir, tmp_path) -> None:
                 "scope": "ward",
                 "unit": "MED-A",
                 "period": "annual:2024",
-                "organism": "Escherichia coli",
+                "organism": "escherichia_coli",
             },
         ).json()
         amp = next(
@@ -243,7 +243,7 @@ def test_recommendation_endpoint(dataset_dir, tmp_path) -> None:
             params={
                 "scope": "ward",
                 "unit": "MED-A",
-                "organism": "Escherichia coli",
+                "organism": "escherichia_coli",
                 "specimen": "urine",
             },
         )
