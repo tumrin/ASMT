@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from dataclasses import replace
 
 import polars as pl
@@ -15,21 +14,24 @@ def _settings(dataset_dir, tmp_path) -> Settings:
     return replace(Settings(), data_dir=dataset_dir, out_dir=tmp_path / "output")
 
 
-def test_pipeline_writes_outputs(dataset_dir, tmp_path) -> None:
+def _client(tmp_path) -> TestClient:
+    out = tmp_path / "output"
+    app = create_app(out / "dataset.json")
+    return TestClient(app)
+
+
+def test_pipeline_writes_only_the_document(dataset_dir, tmp_path) -> None:
     result = run(_settings(dataset_dir, tmp_path))
 
     assert (tmp_path / "output" / "dataset.json").exists()
-    assert (tmp_path / "output" / "analytics.csv").exists()
-    assert (tmp_path / "output" / "deviations.csv").exists()
-    assert (tmp_path / "output" / "outliers.csv").exists()
-    assert not (tmp_path / "output" / "antibiotic_properties.json").exists()
+    assert not (tmp_path / "output" / "analytics.csv").exists()
+    assert not (tmp_path / "output" / "deviations.csv").exists()
+    assert not (tmp_path / "output" / "outliers.csv").exists()
 
-    # Deviations are reported only; every record is kept unchanged.
-    isolates = result.raw.isolates
-    assert "C4-1" in isolates["isolate_id"].to_list()
-    assert isolates.filter(pl.col("isolate_id") == "C5-1")["mrsa"][0] == 1
-    assert isolates.filter(pl.col("isolate_id") == "C2-1")["mrsa"][0] == 1
-    assert "removed" not in result.deviation_summary
+    # Every record is kept unchanged.
+    assert "C4-1" in result.raw.isolates["isolate_id"].to_list()
+    assert result.raw.isolates.filter(pl.col("isolate_id") == "C5-1")["mrsa"][0] == 1
+    assert result.raw.isolates.filter(pl.col("isolate_id") == "C2-1")["mrsa"][0] == 1
 
 
 def test_pipeline_does_not_change_data(dataset_dir, tmp_path) -> None:
@@ -82,34 +84,43 @@ def test_document_structure_and_lookup(dataset_dir, tmp_path) -> None:
 
     assert "ICU" not in patient["wards"]
     assert "NOPE" not in doc["patients"]
-    assert "Escherichia coli|urine" in doc["antibiotic_tiers"]
+    assert "antibiotic_tiers" not in doc
 
     metadata = doc["metadata"]
-    assert "age_band_edges" in metadata
-    assert "outlier_summary" in metadata
+    assert metadata["data_as_of"] == "2024-01-05"
+    assert metadata["periods"] == ["annual:2024", "last4w"]
+    assert [unit["unit"] for unit in metadata["scopes"]["ward"]] == [
+        "ICU",
+        "MED-A",
+        "MED-B",
+    ]
+    assert [unit["unit"] for unit in metadata["scopes"]["region"]] == ["Centre"]
+    assert metadata["settings"]["min_isolates"] == 30
+    assert "age_band_edges" not in metadata
+    assert "deviation_summary" not in metadata
+    assert "outlier_summary" not in metadata
     assert "thresholds" not in metadata
-    assert "recent_months" not in metadata
-    assert (
-        "mdr"
-        not in next(iter(doc["patients"]["P1"]["wards"]["MED-A"]["cultures"]))[
-            "isolates"
-        ][0]
-    )
+
+    assert "hospital|-|annual:2024" in doc["antibiogram"]
+    assert doc["wards"]["MED-A"]["ward_type"] == "in"
 
 
 def test_api_endpoints(dataset_dir, tmp_path) -> None:
     run(_settings(dataset_dir, tmp_path))
-    out = tmp_path / "output"
-    app = create_app(
-        out / "dataset.json", out / "analytics.csv", out / "deviations.csv"
-    )
 
-    with TestClient(app) as client:
+    with _client(tmp_path) as client:
         assert client.get("/health").json() == {"status": "ok"}
 
         metadata = client.get("/metadata")
         assert metadata.status_code == 200
         assert metadata.json()["counts"]["patients"] == 4
+
+        patients = client.get("/patients")
+        assert patients.status_code == 200
+        body = patients.json()
+        assert body["n"] == 4
+        assert body["patients"][0]["patient_id"] == "P1"
+        assert body["patients"][0]["wards"] == ["MED-A"]
 
         patient = client.get("/patients/P1")
         assert patient.status_code == 200
@@ -121,123 +132,18 @@ def test_api_endpoints(dataset_dir, tmp_path) -> None:
         assert client.get("/patients/P1/wards/ICU").status_code == 404
         assert client.get("/patients/NOPE").status_code == 404
 
-        patients = client.get("/wards/MED-A/patients")
-        assert patients.status_code == 200
-        assert patients.json()["n_patients"] == 1
+        ward_patients = client.get("/wards/MED-A/patients")
+        assert ward_patients.status_code == 200
+        assert ward_patients.json()["n_patients"] == 1
 
         ward = client.get("/wards/MED-A")
         assert ward.status_code == 200
         body = ward.json()
         assert body["ward_code"] == "MED-A"
         assert body["counts"]["cultures"] >= 1
-        assert "flag_rates_by_organism" in body
-        assert "urine" in body["resistance_by_antibiotic"]
+        assert "flag_rates_by_organism" not in body
+        assert "organism" not in body
         assert client.get("/wards/NOPE").status_code == 404
-
-        tiers = client.get(
-            "/tiers/Escherichia coli",
-            params={"specimen": "urine"},
-        )
-        assert tiers.status_code == 200
-        body = tiers.json()
-        codes = {entry["antibiotic_code"] for entry in body["tiers"]}
-        assert codes >= {"AMP", "MEC"}
-        assert "predicted_resistance" not in body["tiers"][0]
-
-        all_specimens = client.get("/tiers/Escherichia coli")
-        assert all_specimens.status_code == 200
-        assert "urine" in all_specimens.json()["tiers"]
-
-        deviations = client.get("/deviations", params={"family": "consistency"})
-        assert deviations.status_code == 200
-        assert deviations.json()["n"] > 0
-        assert isinstance(deviations.json()["deviations"][0]["detail"], dict)
-
-        outliers = client.get("/outliers")
-        assert outliers.status_code == 200
-        assert "outliers" in outliers.json()
-        assert (
-            client.get(
-                "/outliers", params={"detector": "ward_rate_outlier"}
-            ).status_code
-            == 200
-        )
-
-
-def test_decision_brief_endpoint(dataset_dir, tmp_path) -> None:
-    run(_settings(dataset_dir, tmp_path))
-    out = tmp_path / "output"
-    app = create_app(
-        out / "dataset.json", out / "analytics.csv", out / "deviations.csv"
-    )
-    with TestClient(app) as client:
-        response = client.post(
-            "/decision-briefs",
-            json={
-                "patient_id": "P1",
-                "encounter": {"ward_code": "MED-A"},
-                "culture": {
-                    "organism": "Escherichia coli",
-                    "specimen": "urine",
-                    "culture_date": "2024-01-05",
-                },
-            },
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert body["context"]["ward_code"] == "MED-A"
-        codes = [entry["antibiotic_code"] for entry in body["options"]]
-        assert codes == ["MEC", "AMP"]
-        assert body["options"][0]["observed_resistance"] == 0.0
-        assert body["options"][1]["prior_result"] == "R"
-        assert "insufficient_evidence" not in body
-        assert body["period"]["start"] == "2024-01-01"
-
-
-def test_decision_brief_reports_screens_and_history(dataset_dir, tmp_path) -> None:
-    isolates = pl.read_csv(dataset_dir / "isolates.csv").with_columns(
-        pl.when(pl.col("isolate_id") == "C2-1")
-        .then(0)
-        .otherwise(pl.col("mrsa"))
-        .alias("mrsa")
-    )
-    isolates.write_csv(dataset_dir / "isolates.csv")
-
-    run(_settings(dataset_dir, tmp_path))
-    out = tmp_path / "output"
-    app = create_app(
-        out / "dataset.json", out / "analytics.csv", out / "deviations.csv"
-    )
-    with TestClient(app) as client:
-        response = client.post(
-            "/decision-briefs",
-            json={
-                "patient_id": "P2",
-                "encounter": {"ward_code": "ICU"},
-                "culture": {
-                    "organism": "Staphylococcus aureus",
-                    "specimen": "blood",
-                    "culture_date": "2024-01-02",
-                },
-            },
-        )
-        assert response.status_code == 200
-        body = response.json()
-        assert {entry["antibiotic_code"] for entry in body["options"]} == {"VAN"}
-        assert body["screens"] == [
-            {
-                "antibiotic": "cefoxitin (screen)",
-                "antibiotic_code": "FOX",
-                "result": "S",
-                "interpretation": "screen negative",
-            }
-        ]
-
-        history = client.get(
-            "/patients/P1/history", params={"organism": "Escherichia coli"}
-        )
-        assert history.status_code == 200
-        assert len(history.json()["history"]) == 2
 
         antibiotics = client.get("/antibiotics")
         assert antibiotics.status_code == 200
@@ -246,33 +152,112 @@ def test_decision_brief_reports_screens_and_history(dataset_dir, tmp_path) -> No
             for entry in antibiotics.json()["antibiotics"]
         }
         assert by_code["FOX"]["role"] == "screen"
-        assert by_code["FOX"]["marker_flags"] == ["mrsa"]
-        assert "routes" not in by_code["FOX"]
+        assert "marker_flags" not in by_code["FOX"]
+
+        assert client.get("/deviations").status_code == 404
+        assert client.get("/outliers").status_code == 404
 
 
-def test_ward_antibiogram_endpoint(dataset_dir, tmp_path) -> None:
+def test_antibiogram_endpoint(dataset_dir, tmp_path) -> None:
     run(_settings(dataset_dir, tmp_path))
-    out = tmp_path / "output"
-    app = create_app(
-        out / "dataset.json", out / "analytics.csv", out / "deviations.csv"
-    )
-    with TestClient(app) as client:
+
+    with _client(tmp_path) as client:
         response = client.get(
-            "/wards/MED-A/antibiogram",
-            params={"specimen": "urine", "organism": "Escherichia coli"},
+            "/antibiogram",
+            params={"scope": "hospital", "period": "annual:2024"},
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["ward_code"] == "MED-A"
-        entries = body["specimens"]["urine"]["Escherichia coli"]
-        assert {entry["antibiotic_code"] for entry in entries} >= {"AMP", "MEC"}
-        assert all(entry["role"] != "screen" for entry in entries)
-        assert client.get("/wards/NOPE/antibiogram").status_code == 404
+        assert body["scope"] == "hospital"
+        assert body["period"] == "annual:2024"
+
+        rows = {(row["organism"], row["specimen"]): row for row in body["organisms"]}
+        ecoli_codes = {
+            entry["antibiotic_code"]
+            for entry in rows[("Escherichia coli", "urine")]["antibiotics"]
+        }
+        assert ecoli_codes == {"AMP", "MEC"}
+        # The screen agent is excluded by default.
+        aureus_codes = {
+            entry["antibiotic_code"]
+            for entry in rows[("Staphylococcus aureus", "blood")]["antibiotics"]
+        }
+        assert aureus_codes == {"VAN"}
+
+        with_screens = client.get(
+            "/antibiogram",
+            params={
+                "scope": "hospital",
+                "period": "annual:2024",
+                "specimen": "blood",
+                "include_screens": True,
+            },
+        ).json()
+        codes = {
+            entry["antibiotic_code"]
+            for row in with_screens["organisms"]
+            for entry in row["antibiotics"]
+        }
+        assert codes == {"FOX", "VAN"}
+        roles = {
+            entry["antibiotic_code"]: entry["role"]
+            for row in with_screens["organisms"]
+            for entry in row["antibiotics"]
+        }
+        assert roles["FOX"] == "screen"
+
+        # Ward cell counts only P1's first isolate.
+        ward = client.get(
+            "/antibiogram",
+            params={
+                "scope": "ward",
+                "unit": "MED-A",
+                "period": "annual:2024",
+                "organism": "Escherichia coli",
+            },
+        ).json()
+        amp = next(
+            entry
+            for row in ward["organisms"]
+            for entry in row["antibiotics"]
+            if entry["antibiotic_code"] == "AMP"
+        )
+        assert amp["n"] == 1
+        assert amp["susceptibility_rate"] is None
+        assert amp["traffic_light"] == "none"
+
+        assert (
+            client.get(
+                "/antibiogram", params={"scope": "ward", "unit": "NOPE"}
+            ).status_code
+            == 404
+        )
 
 
-def test_written_json_is_valid(dataset_dir, tmp_path) -> None:
+def test_recommendation_endpoint(dataset_dir, tmp_path) -> None:
     run(_settings(dataset_dir, tmp_path))
-    doc = json.loads((tmp_path / "output" / "dataset.json").read_text(encoding="utf-8"))
-    assert "metadata" in doc and "patients" in doc and "antibiotic_tiers" in doc
-    assert "marker_flags" in doc["antibiotics"][0]
-    assert "routes" not in doc["antibiotics"][0]
+
+    with _client(tmp_path) as client:
+        response = client.get(
+            "/recommendations",
+            params={
+                "scope": "ward",
+                "unit": "MED-A",
+                "organism": "Escherichia coli",
+                "specimen": "urine",
+            },
+        )
+        assert response.status_code == 200
+        body = response.json()
+        codes = [entry["antibiotic_code"] for entry in body["options"]]
+        assert codes == ["AMP", "MEC"]
+        assert all(entry["susceptibility_rate"] is None for entry in body["options"])
+        assert all(entry["traffic_light"] == "none" for entry in body["options"])
+        # No reportable ward cell, so the rate falls back to the ward last4w base.
+        assert body["options"][0]["source_scope"] == "ward"
+        assert body["options"][0]["source_period"] == "last4w"
+
+        excluded = {entry["antibiotic_code"]: entry for entry in body["excluded"]}
+        assert excluded["VAN"]["reason"] == "no_specimen_data"
+        assert "FOX" not in excluded
+        assert body["data_as_of"] == "2024-01-05"

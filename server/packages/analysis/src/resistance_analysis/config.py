@@ -19,13 +19,20 @@ def _default_data_dir() -> Path:
 
 @dataclass(frozen=True)
 class Settings:
-    """Runtime settings. No clinical thresholds or curated metadata live here."""
+    """Runtime settings. Thresholds are the only configurable cutoffs."""
 
     data_dir: Path = field(default_factory=_default_data_dir)
     out_dir: Path = field(default_factory=lambda: Path("output"))
 
-    # Count only the first isolate per patient x species x specimen (surveillance rule).
-    surveillance: bool = True
+    # A rate is only reported at or above this many counted isolates.
+    min_isolates: int = 30
+    # Exclusive lower bounds for the traffic light: green above, yellow above.
+    green_above: float = 0.80
+    yellow_above: float = 0.60
 
     def to_json(self) -> dict[str, object]:
-        return {"surveillance": self.surveillance}
+        return {
+            "min_isolates": self.min_isolates,
+            "green_above": self.green_above,
+            "yellow_above": self.yellow_above,
+        }
