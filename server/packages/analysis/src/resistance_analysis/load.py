@@ -97,6 +97,16 @@ def read_table(path: Path, schema: dict[str, DataTypeClass]) -> pl.DataFrame:
     return df.select(list(schema))
 
 
+def normalize_organism(column: str = "organism") -> pl.Expr:
+    """Trim, lowercase, and collapse each run of dots/whitespace into one `_`."""
+    return (
+        pl.col(column)
+        .str.strip_chars()
+        .str.to_lowercase()
+        .str.replace_all(r"[.\s]+", "_")
+    )
+
+
 def load_dataset(data_dir: Path) -> Dataset:
     frames = {
         name: read_table(data_dir / name, schema) for name, schema in SCHEMAS.items()
@@ -104,8 +114,8 @@ def load_dataset(data_dir: Path) -> Dataset:
     ds = Dataset(
         patients=frames["patients.csv"],
         cultures=frames["cultures.csv"],
-        isolates=frames["isolates.csv"],
-        susceptibility=frames["susceptibility.csv"],
+        isolates=frames["isolates.csv"].with_columns(normalize_organism()),
+        susceptibility=frames["susceptibility.csv"].with_columns(normalize_organism()),
         antibiotics=frames["antibiotics.csv"],
         wards=frames["wards.csv"],
     )

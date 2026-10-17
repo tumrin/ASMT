@@ -35,9 +35,28 @@ npm run preview       # serve the production build
 ```
 
 The views call the backend API, so start it first (see Development in
-`server/README.md`); it serves on `http://127.0.0.1:8000`. There is no dev proxy or
-backend base URL setting yet (see Implementation status), so the frontend cannot reach
-the API until one is added.
+`server/README.md`); it serves on `http://127.0.0.1:8000`. The frontend fetches
+`/api/*`, and the Vite server (`npm run dev` and `npm run preview`) proxies those
+requests to the backend with the `/api` prefix stripped.
+
+### Environment files
+
+The proxy target is read from an env file in `frontend/`. Copy `.env.example` to the
+file for the mode you run:
+
+```sh
+cp .env.example .env.development   # npm run dev
+cp .env.example .env.production    # npm run build / npm run preview
+```
+
+| Variable | Required | Example | Description |
+|---|---|---|---|
+| `API_URL` | yes | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
+
+`API_URL` is only read by `vite.config.ts` (via `loadEnv`), so it never reaches
+browser code. `.env.example` is committed; every other `.env*` file is gitignored.
+The proxy exists only in the Vite dev and preview servers; a production deployment
+must route `/api` to the backend itself.
 
 There are no tests, linter or formatter set up yet, so `npm run check` is the only
 check to run before you push.
@@ -111,14 +130,13 @@ Doctors and nurses (spec.md §2). There is no authentication or pagination
 
 ## Implementation status
 
-The project is a fresh SvelteKit scaffold; the Views section describes the finished
-product. Not implemented yet:
+The Views section describes the finished product. Implemented so far: a basic
+antibiogram page at `/antibiogram` with organism, specimen, ward and period filters.
+Display names for organisms, specimens and wards are hardcoded in `src/lib/`. Not
+implemented yet:
 
-- All views: `routes/+page.svelte` is still the SvelteKit welcome placeholder.
-- API client: no fetch code, backend base URL setting or dev proxy in
-  `vite.config.ts`.
+- Recommendations and patient views; `routes/+page.svelte` is still the SvelteKit
+  welcome placeholder.
+- API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
 - PDF export: no PDF library chosen.
 - Deployment adapter: `adapter-auto` is still in place.
-
-The backend does not serve `/antibiogram`, `/recommendations` or `/patients` yet (see
-Conflicts in `server/README.md`), so the views have no endpoints to call until it does.
