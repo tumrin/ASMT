@@ -1,0 +1,10 @@
+ward_code,ward_fi,ward_en,ward_type,institution
+ED,Päivystys,Emergency department,out,hospital
+MED-A,Sisätaudit A,Internal medicine A,in,hospital
+MED-B,Sisätaudit B,Internal medicine B,in,hospital
+SURG,Kirurgia,Surgery,in,hospital
+URO,Urologia,Urology,in,hospital
+ICU,Teho-osasto,Intensive care unit,in,hospital
+GER,Geriatria,Geriatrics,in,hospital
+PHC-N,Terveysasema Pohjoinen,Health centre North,out,primary_care
+PHC-S,Terveysasema Etelä,Health centre South,out,primary_care

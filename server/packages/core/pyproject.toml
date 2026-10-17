@@ -1,0 +1,10 @@
+[project]
+name = "resistance-core"
+version = "0.1.0"
+description = "Shared domain logic (statistics, demographics, tier model) used by the pipeline and the API."
+requires-python = ">=3.11"
+dependencies = ["polars>=1.0"]
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"

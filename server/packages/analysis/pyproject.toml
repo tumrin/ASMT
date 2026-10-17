@@ -1,0 +1,20 @@
+[project]
+name = "resistance-analysis"
+version = "0.1.0"
+description = "Staged analysis of patient-level correlates of bacterial resistance; writes the JSON artifacts."
+requires-python = ">=3.11"
+dependencies = [
+    "resistance-core",
+    "polars>=1.0",
+    "scipy>=1.11",
+]
+
+[project.scripts]
+resistance-analysis = "resistance_analysis.__main__:main"
+
+[tool.uv.sources]
+resistance-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"

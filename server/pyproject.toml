@@ -1,0 +1,28 @@
+[project]
+name = "resistance-workspace"
+version = "0.1.0"
+description = "Workspace root for the resistance analysis pipeline and API."
+requires-python = ">=3.11"
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[dependency-groups]
+dev = [
+    "resistance-analysis",
+    "resistance-api",
+    "pytest>=8.0",
+    "httpx>=0.27",
+    "ruff>=0.6",
+    "ty>=0.0.1",
+]
+
+[tool.uv.sources]
+resistance-analysis = { workspace = true }
+resistance-api = { workspace = true }
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,14 @@
+antibiotic,antibiotic_code,antibiotic_fi,class,reported_for
+ampicillin,AMP,ampisilliini,penicillins,all
+mecillinam,MEC,mesillinaami,penicillins,urine
+piperacillin-tazobactam,TZP,piperasilliini-tatsobaktaami,penicillins + BLI,all
+cefoxitin (screen),FOX,kefoksitiini (seulonta),MRSA screen,all
+cefuroxime,CXM,kefuroksiimi,cephalosporins 2nd gen,all
+ceftriaxone,CRO,keftriaksoni,cephalosporins 3rd gen,all
+ceftazidime,CAZ,keftatsidiimi,cephalosporins 3rd gen,all
+meropenem,MEM,meropeneemi,carbapenems,all
+ciprofloxacin,CIP,siprofloksasiini,fluoroquinolones,all
+trimethoprim,TMP,trimetopriimi,trimethoprim,urine
+nitrofurantoin,NIT,nitrofurantoiini,nitrofurans,urine
+vancomycin,VAN,vankomysiini,glycopeptides,all
+clindamycin,CLI,klindamysiini,lincosamides,all

@@ -1,0 +1,21 @@
+[project]
+name = "resistance-api"
+version = "0.1.0"
+description = "FastAPI serving layer over the analysis artifacts. Does not import the pipeline."
+requires-python = ">=3.11"
+dependencies = [
+    "resistance-core",
+    "polars>=1.0",
+    "fastapi>=0.110",
+    "uvicorn>=0.29",
+]
+
+[project.scripts]
+resistance-api = "resistance_api.__main__:main"
+
+[tool.uv.sources]
+resistance-core = { workspace = true }
+
+[build-system]
+requires = ["uv_build>=0.13.1,<0.14"]
+build-backend = "uv_build"
