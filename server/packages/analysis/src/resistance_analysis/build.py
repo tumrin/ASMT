@@ -95,5 +95,8 @@ def build_susceptibility_analytics(ds: Dataset, contexts: pl.DataFrame) -> pl.Da
         ds.susceptibility.join(ab, on="antibiotic_code", how="left")
         .join(ctx, on="culture_id", how="left")
         .join(patients, on="patient_id", how="left")
-        .with_columns((pl.col("result") == "R").alias("is_r"))
+        .with_columns(
+            (pl.col("result") == "R").alias("is_r"),
+            (pl.col("result") == "S").alias("is_s"),
+        )
     )

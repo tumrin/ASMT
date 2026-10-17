@@ -4,92 +4,17 @@ from collections import defaultdict
 from typing import Any
 
 import polars as pl
-from resistance_core.antibiotic_properties import (
-    MARKER_FLAGS,
-    marker_codes,
-    metadata_by_code,
-)
-from resistance_core.stats import wilson_interval
+from resistance_core.antibiotic_properties import MARKER_FLAGS, marker_codes
 
 BASIS = (
-    "volumes from all records; isolates and resistance rates from the "
-    "first-isolate surveillance view; flag rates are per organism and use the "
-    "marker antibiotic denominator present in susceptibility.csv; screens are "
-    "excluded from treatment lists"
+    "volumes from all records; isolates from the first-isolate surveillance view; "
+    "flag rates are per organism and use the marker antibiotic denominator present "
+    "in susceptibility.csv"
 )
 
 
 def _rate(n_pos: int, n: int) -> float:
     return round(n_pos / n, 4) if n else 0.0
-
-
-def _antibiotic_entry(row: dict[str, Any], metadata: dict[str, Any]) -> dict[str, Any]:
-    meta = metadata[row["antibiotic_code"]]
-    n = int(row["n"])
-    n_pos = int(row["n_pos"])
-    low, high = wilson_interval(n_pos, n)
-    return {
-        "antibiotic": row["antibiotic"],
-        "antibiotic_code": row["antibiotic_code"],
-        "class": row["class"],
-        "specimen": row["specimen"],
-        "reported_for": meta.reported_for,
-        "role": meta.role,
-        "n": n,
-        "n_pos": n_pos,
-        "rate": _rate(n_pos, n),
-        "ci_low": round(low, 4),
-        "ci_high": round(high, 4),
-    }
-
-
-def _tiered_by_specimen(
-    rows: list[dict[str, Any]], metadata: dict[str, Any]
-) -> dict[str, list[dict[str, Any]]]:
-    grouped: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in rows:
-        entry = _antibiotic_entry(row, metadata)
-        if entry["role"] == "screen":
-            continue
-        grouped[row["specimen"]].append(entry)
-    for entries in grouped.values():
-        entries.sort(key=lambda entry: (entry["rate"], entry["antibiotic"]))
-    return dict(grouped)
-
-
-def _build_antibiogram(
-    ab_analysis: pl.DataFrame, metadata: dict[str, Any]
-) -> dict[str, dict[str, dict[str, list[dict[str, Any]]]]]:
-    if "organism" not in ab_analysis.columns:
-        return {}
-    grouped: dict[str, dict[str, dict[str, list[dict[str, Any]]]]] = defaultdict(
-        lambda: defaultdict(lambda: defaultdict(list))
-    )
-    rows = (
-        ab_analysis.group_by(
-            "ward_code",
-            "specimen",
-            "organism",
-            "antibiotic",
-            "antibiotic_code",
-            "class",
-        )
-        .agg(pl.len().alias("n"), pl.col("is_r").sum().alias("n_pos"))
-        .sort("ward_code", "specimen", "organism", "antibiotic")
-    )
-    for row in rows.iter_rows(named=True):
-        entry = _antibiotic_entry(row, metadata)
-        if entry["role"] == "screen":
-            continue
-        grouped[row["ward_code"]][row["specimen"]][row["organism"]].append(entry)
-    for specimens in grouped.values():
-        for organisms in specimens.values():
-            for entries in organisms.values():
-                entries.sort(key=lambda entry: (entry["rate"], entry["antibiotic"]))
-    return {
-        ward: {specimen: dict(organisms) for specimen, organisms in specimens.items()}
-        for ward, specimens in grouped.items()
-    }
 
 
 def _flag_rates_by_organism(
@@ -143,8 +68,7 @@ def build_ward_summaries(
     antibiotics: pl.DataFrame,
     top_n: int = 10,
 ) -> dict[str, dict[str, Any]]:
-    """Per-ward overview: volumes, case mix, organisms and resistance rates."""
-    metadata = metadata_by_code(antibiotics)
+    """Per-ward overview: volumes, case mix, organisms and flag rates."""
     markers = marker_codes(antibiotics)
     ward_meta = {row["ward_code"]: row for row in wards_meta.iter_rows(named=True)}
 
@@ -199,18 +123,6 @@ def build_ward_summaries(
     ):
         organisms[row["ward_code"]].append(row)
 
-    antibiotics_rows: dict[str, list[dict[str, Any]]] = defaultdict(list)
-    for row in (
-        ab_analysis.group_by(
-            "ward_code", "specimen", "antibiotic", "antibiotic_code", "class"
-        )
-        .agg(pl.len().alias("n"), pl.col("is_r").sum().alias("n_pos"))
-        .sort("n", descending=True)
-        .iter_rows(named=True)
-    ):
-        antibiotics_rows[row["ward_code"]].append(row)
-
-    antibiogram = _build_antibiogram(ab_analysis, metadata)
     flag_rates = _flag_rates_by_organism(analysis, ab_analysis, markers)
 
     summaries: dict[str, dict[str, Any]] = {}
@@ -241,10 +153,6 @@ def build_ward_summaries(
                 for row in organisms.get(ward_code, [])[:top_n]
             ],
             "flag_rates_by_organism": flag_rates.get(ward_code, {}),
-            "resistance_by_antibiotic": _tiered_by_specimen(
-                antibiotics_rows.get(ward_code, []), metadata
-            ),
-            "antibiogram": antibiogram.get(ward_code, {}),
             "basis": BASIS,
         }
     return summaries

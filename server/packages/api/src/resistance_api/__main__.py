@@ -11,7 +11,6 @@ def main(argv: list[str] | None = None) -> int:
 
     parser = argparse.ArgumentParser(prog="resistance-api")
     parser.add_argument("--dataset", type=Path, default=Path("output/dataset.json"))
-    parser.add_argument("--analytics", type=Path, default=Path("output/analytics.csv"))
     parser.add_argument(
         "--deviations", type=Path, default=Path("output/deviations.csv")
     )
@@ -22,7 +21,6 @@ def main(argv: list[str] | None = None) -> int:
 
     app = create_app(
         dataset_path=args.dataset,
-        analytics_path=args.analytics,
         deviations_path=args.deviations,
         outliers_path=args.outliers,
     )

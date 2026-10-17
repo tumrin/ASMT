@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, Field
 
 # --- service ---------------------------------------------------------------
 
@@ -45,13 +45,20 @@ class SummaryCounts(BaseModel):
     by_detector: dict[str, int]
 
 
+class ScopeUnit(BaseModel):
+    unit: str
+    label: str
+
+
 class MetadataResponse(BaseModel):
     source: str
     counts: Counts
     date_range: DateRange
-    as_of: str | None
+    data_as_of: str | None
     age_band_edges: list[float]
     settings: dict[str, Any]
+    scopes: dict[str, list[ScopeUnit]]
+    periods: list[str]
     deviation_summary: SummaryCounts
     outlier_summary: SummaryCounts
 
@@ -68,6 +75,15 @@ class PatientInfo(BaseModel):
 
 class PatientSummary(PatientInfo):
     wards: list[str]
+
+
+class PatientListEntry(PatientInfo):
+    wards: list[str]
+
+
+class PatientsResponse(BaseModel):
+    n: int
+    patients: list[PatientListEntry]
 
 
 class WardPatient(PatientInfo):
@@ -131,20 +147,6 @@ class PatientWardResponse(BaseModel):
 # --- ward summary ----------------------------------------------------------
 
 
-class AntibioticRate(BaseModel):
-    antibiotic: str
-    antibiotic_code: str
-    antibiotic_class: str = Field(alias="class")
-    specimen: str
-    reported_for: str
-    role: str
-    n: int
-    n_pos: int
-    rate: float
-    ci_low: float
-    ci_high: float
-
-
 class FlagRate(BaseModel):
     n: int
     n_pos: int
@@ -172,18 +174,8 @@ class WardSummary(BaseModel):
     cultures_by_result: dict[str, int]
     organisms: list[WardOrganism]
     flag_rates_by_organism: dict[str, dict[str, FlagRate]]
-    resistance_by_antibiotic: dict[str, list[AntibioticRate]]
-    antibiogram: dict[str, dict[str, list[AntibioticRate]]]
     basis: str
-    as_of: str | None = None
-
-
-class AntibiogramResponse(BaseModel):
-    ward_code: str
-    ward_type: str | None
-    institution: str | None
-    as_of: str | None
-    specimens: dict[str, dict[str, list[AntibioticRate]]]
+    data_as_of: str | None = None
 
 
 # --- history ---------------------------------------------------------------
@@ -223,69 +215,44 @@ class AntibioticsResponse(BaseModel):
     antibiotics: list[AntibioticInfo]
 
 
-# --- observed-resistance tiers ---------------------------------------------
+# --- antibiogram -----------------------------------------------------------
 
 
-class TierOption(BaseModel):
+class AntibioticCell(BaseModel):
     antibiotic: str
     antibiotic_code: str
     antibiotic_class: str = Field(alias="class")
     reported_for: str
     role: str
-    observed_resistance: float | None
-    observed_n: int
-    observed_ci_low: float | None
-    observed_ci_high: float | None
-    observed_source: str
-    overall_resistance: float | None
-    overall_n: int
-    overall_ci_low: float | None
-    overall_ci_high: float | None
+    n: int
+    n_s: int
+    susceptibility_rate: float | None
+    ci_low: float | None
+    ci_high: float | None
+    traffic_light: str
 
 
-class TierListResponse(BaseModel):
-    """`/tiers/{organism}?specimen=...` — one observed rate list."""
-
-    model_config = ConfigDict(extra="forbid")
-
+class AntibiogramRow(BaseModel):
     organism: str
     specimen: str
-    context: dict[str, Any]
-    tiers: list[TierOption]
+    antibiotics: list[AntibioticCell]
 
 
-class TierMapResponse(BaseModel):
-    """`/tiers/{organism}` without a specimen — every specimen's rate list."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    organism: str
-    tiers: dict[str, list[TierOption]]
-
-
-# --- decision briefs -------------------------------------------------------
+class AntibiogramResponse(BaseModel):
+    scope: str
+    unit: str
+    period: str
+    data_as_of: str | None
+    organisms: list[AntibiogramRow]
 
 
-class Warning(BaseModel):
-    code: str
-    severity: str
-    message: str
+# --- recommendations -------------------------------------------------------
 
 
-class DecisionOption(TierOption):
-    prior_result: str | None
-    prior_resistant: bool
-    prior_susceptible: bool
-    warnings: list[Warning]
-    rank: int
-    rank_group: int
-
-
-class ScreenResult(BaseModel):
-    antibiotic: str
-    antibiotic_code: str
-    result: str
-    interpretation: str
+class RecommendationOption(AntibioticCell):
+    source_scope: str
+    source_unit: str
+    source_period: str
 
 
 class Exclusion(BaseModel):
@@ -295,22 +262,14 @@ class Exclusion(BaseModel):
     detail: str
 
 
-class Period(BaseModel):
-    start: str | None = None
-    end: str | None = None
-
-
-class DecisionBriefResponse(BaseModel):
-    request_id: str
-    generated_at: str
+class RecommendationsResponse(BaseModel):
+    scope: str
+    unit: str
+    organism: str
+    specimen: str
     data_as_of: str | None
-    headline: str
-    context: dict[str, Any]
-    period: Period
-    options: list[DecisionOption]
-    screens: list[ScreenResult]
+    options: list[RecommendationOption]
     excluded: list[Exclusion]
-    patient_history: list[HistoryEntry]
     limitations: list[str]
 
 

@@ -30,7 +30,7 @@ def _run(args: argparse.Namespace) -> int:
     print(f"deviations detected: {result.deviation_summary['total']}")
     print(f"outliers detected:   {result.outlier_summary['total']}")
     print(f"correlation rows:    {result.correlations.height}")
-    print(f"tier lists:          {len(result.tiers)}")
+    print(f"antibiogram scopes:  {len(result.antibiogram.matrix)}")
     print(f"output written to:   {out}")
     return 0
 

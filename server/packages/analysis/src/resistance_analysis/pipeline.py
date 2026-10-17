@@ -6,9 +6,9 @@ from typing import Any
 
 import polars as pl
 from resistance_core.demographics import age_band_edges as derive_age_band_edges
-from resistance_core.tiers import TierModel
 
 from . import build, report, structure, wards
+from .antibiogram import Antibiogram, build_antibiogram
 from .config import Settings
 from .correlate import correlate_all
 from .deviations import (
@@ -36,7 +36,7 @@ class PipelineResult:
     outlier_summary: dict[str, Any]
     correlations: pl.DataFrame
     group_rates: pl.DataFrame
-    tiers: dict[str, list[dict[str, Any]]]
+    antibiogram: Antibiogram
     age_band_edges: tuple[float, ...]
     document: dict[str, Any]
 
@@ -65,8 +65,15 @@ def run(settings: Settings, *, write: bool = True) -> PipelineResult:
 
     correlations, group_rates = correlate_all(analysis, ab_analysis)
 
-    model = TierModel(ab_analysis, raw.antibiotics)
-    tiers = model.all_base_tiers()
+    antibiogram = build_antibiogram(
+        contexts,
+        analytics,
+        ab_analytics,
+        raw.patients,
+        raw.wards,
+        raw.antibiotics,
+        settings,
+    )
     ward_summaries = wards.build_ward_summaries(
         contexts, analysis, ab_analysis, raw.wards, raw.antibiotics
     )
@@ -78,7 +85,7 @@ def run(settings: Settings, *, write: bool = True) -> PipelineResult:
         contexts,
         analytics,
         ab_analytics,
-        tiers,
+        antibiogram,
         ward_summaries,
         deviation_summary,
         outlier_summary,
@@ -100,7 +107,7 @@ def run(settings: Settings, *, write: bool = True) -> PipelineResult:
         outlier_summary=outlier_summary,
         correlations=correlations,
         group_rates=group_rates,
-        tiers=tiers,
+        antibiogram=antibiogram,
         age_band_edges=age_edges,
         document=document,
     )
@@ -126,7 +133,7 @@ def write_outputs(result: PipelineResult) -> None:
         result.correlations,
         result.deviation_summary,
         result.outlier_summary,
-        result.tiers,
+        result.antibiogram.matrix,
     )
 
 

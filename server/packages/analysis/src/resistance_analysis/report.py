@@ -75,7 +75,7 @@ def write_summary_markdown(
     correlations: pl.DataFrame,
     deviation_summary: dict[str, Any],
     outlier_summary: dict[str, Any],
-    tiers: dict[str, list[dict[str, object]]],
+    antibiogram: dict[str, dict[str, list[dict[str, Any]]]],
 ) -> None:
     counts = metadata["counts"]
     lines: list[str] = []
@@ -108,13 +108,15 @@ def write_summary_markdown(
     lines.append("")
     lines.append(_markdown_table(_top_correlations(correlations)).rstrip("\n"))
     lines.append("")
-    lines.append("## Example antibiotic tier list (Escherichia coli | urine)")
+    lines.append("## Example antibiogram row (hospital | last4w | E. coli urine)")
     lines.append("")
-    example = tiers.get("Escherichia coli|urine", [])[:6]
-    if example:
-        lines.append(_markdown_table(pl.DataFrame(example)).rstrip("\n"))
+    example_row = antibiogram.get("hospital|-|last4w", {}).get(
+        "Escherichia coli|urine", []
+    )[:6]
+    if example_row:
+        lines.append(_markdown_table(pl.DataFrame(example_row)).rstrip("\n"))
     else:
-        lines.append("_(no tier list available)_")
+        lines.append("_(no reportable row available)_")
     lines.append("")
     lines.append("## Caveats")
     lines.append("")
@@ -125,7 +127,9 @@ def write_summary_markdown(
         "present in susceptibility.csv."
     )
     lines.append(
-        "- Surveillance rule applied: first isolate per patient x species x specimen."
+        "- Susceptibility rates count the first isolate per patient x species x "
+        "specimen per period, report a rate at >= 30 isolates and use the "
+        "traffic-light cutoffs in `settings`."
     )
     lines.append(
         "- Outliers are 95% funnel deviations from the same-ward_type reference; "

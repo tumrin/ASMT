@@ -6,6 +6,7 @@ from typing import Any
 import polars as pl
 from resistance_core.antibiotic_properties import metadata_from_row
 
+from .antibiogram import Antibiogram
 from .config import Settings
 from .load import Dataset
 
@@ -70,7 +71,7 @@ def build_document(
     contexts: pl.DataFrame,
     analytics: pl.DataFrame,
     ab_analytics: pl.DataFrame,
-    tiers: dict[str, list[dict[str, object]]],
+    antibiogram: Antibiogram,
     ward_summaries: dict[str, dict[str, Any]],
     deviation_summary: dict[str, Any],
     outlier_summary: dict[str, Any],
@@ -162,9 +163,11 @@ def build_document(
             "start": str(sample_dates.min()),
             "end": str(sample_dates.max()),
         },
-        "as_of": str(sample_dates.max()),
+        "data_as_of": str(sample_dates.max()),
         "age_band_edges": list(age_band_edges),
         "settings": settings.to_json(),
+        "scopes": antibiogram.scopes,
+        "periods": antibiogram.periods,
         "deviation_summary": deviation_summary,
         "outlier_summary": outlier_summary,
     }
@@ -176,5 +179,5 @@ def build_document(
         ],
         "wards": ward_summaries,
         "patients": patients,
-        "antibiotic_tiers": tiers,
+        "antibiogram": antibiogram.matrix,
     }

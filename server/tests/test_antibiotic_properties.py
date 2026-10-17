@@ -7,7 +7,6 @@ from resistance_core.antibiotic_properties import (
     marker_flags_for,
     metadata_from_row,
 )
-from resistance_core.decision import rank_options, warnings_for
 
 
 def _antibiotics() -> pl.DataFrame:
@@ -66,27 +65,3 @@ def test_metadata_from_row_contains_only_dataset_fields() -> None:
     assert meta.role == "therapeutic"
     assert meta.reported_for == "urine"
     assert meta.marker_flags == ()
-
-
-def test_warnings_are_dataset_derived() -> None:
-    meta = metadata_from_row(
-        {
-            "antibiotic": "nitrofurantoin",
-            "antibiotic_code": "NIT",
-            "class": "nitrofurans",
-            "reported_for": "urine",
-        }
-    )
-    codes = {warning["code"] for warning in warnings_for(meta, prior_resistant=True)}
-    assert codes == {"URINE_ONLY", "PRIOR_RESISTANT"}
-
-
-def test_rank_options_groups_overlapping_intervals() -> None:
-    options = [
-        {"antibiotic": "a", "observed_ci_low": 0.01, "observed_ci_high": 0.05},
-        {"antibiotic": "b", "observed_ci_low": 0.03, "observed_ci_high": 0.08},
-        {"antibiotic": "c", "observed_ci_low": 0.20, "observed_ci_high": 0.30},
-    ]
-    ranked = rank_options(options)
-    assert [entry["rank"] for entry in ranked] == [1, 2, 3]
-    assert [entry["rank_group"] for entry in ranked] == [1, 1, 2]

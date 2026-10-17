@@ -128,28 +128,10 @@ def test_flag_rates_use_marker_denominator() -> None:
     assert "vre" not in flags["Staphylococcus aureus"]  # no VAN marker tested
 
 
-def test_antibiogram_is_organism_stratified_and_excludes_screens() -> None:
+def test_ward_summary_has_no_conflicting_evidence_fields() -> None:
     contexts, analysis, ab_analysis, wards_meta, antibiotics = _frames()
     ward = build_ward_summaries(
         contexts, analysis, ab_analysis, wards_meta, antibiotics
     )["MED-A"]
-    antibiogram = ward["antibiogram"]["urine"]
-    assert set(antibiogram) == {"Escherichia coli"}
-    codes = [entry["antibiotic_code"] for entry in antibiogram["Escherichia coli"]]
-    assert codes == ["NIT", "AMP", "CXM"]
-    assert all(
-        entry["role"] != "screen"
-        for entries in antibiogram.values()
-        for entry in entries
-    )
-
-
-def test_resistance_by_specimen_is_sorted_by_rate() -> None:
-    contexts, analysis, ab_analysis, wards_meta, antibiotics = _frames()
-    ward = build_ward_summaries(
-        contexts, analysis, ab_analysis, wards_meta, antibiotics
-    )["MED-A"]
-    urine = ward["resistance_by_antibiotic"]["urine"]
-    assert [entry["antibiotic_code"] for entry in urine] == ["NIT", "AMP", "CXM"]
-    assert urine[0]["rate"] == 0.0
-    assert urine[1]["rate"] == 0.5
+    assert "antibiogram" not in ward
+    assert "resistance_by_antibiotic" not in ward

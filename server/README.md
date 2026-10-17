@@ -1,11 +1,13 @@
 # resistance-analysis
 
-Data-only analysis of bacterial resistance over the synthetic microbiology dataset,
-producing a queryable JSON document and a FastAPI service.
+Data-only analysis of bacterial susceptibility over the synthetic microbiology
+dataset, producing a queryable JSON document and a FastAPI service.
 
-Every field is either read from the dataset CSVs or derived arithmetically from them.
-No clinical routes, spectrum, indications, review dates, thresholds or other curated
-metadata are used.
+Every field is either read from the dataset CSVs or derived arithmetically from
+them. Data is aggregated, filtered and joined, but never enriched with outside
+data. Nothing is removed or rewritten: deviations and outliers are reported and
+served, never applied to the data. The only thresholds are the configurable
+reporting floor and traffic-light cutoffs.
 
 ## Technology stack
 
@@ -17,6 +19,56 @@ metadata are used.
   - Ty for type checking
   - uv for project management
 
+## Antibiogram model
+
+### Periods and first-isolate rule
+
+| Period | Window |
+|---|---|
+| `annual:<year>` | one calendar year of `sample_date` |
+| `last4w` | the 28 days ending at `data_as_of` (max `sample_date`) |
+
+Within each period, only the first isolate per `patient_id × organism × specimen`
+is counted, ordered by `sample_date, isolate_id`. The rule is applied per period,
+so a patient can contribute one isolate to each year and one to the
+last-four-weeks window.
+
+### Scope
+
+| Scope | Includes |
+|---|---|
+| `hospital` | all cultures (`unit` is `-`) |
+| `ward` | cultures with that `ward_code`, for wards with `ward_type = in` |
+| `region` | cultures from `ward_type = out` units, grouped by the patient's `home_area` |
+
+### Cell
+
+For each scope × period × organism × specimen × antibiotic:
+
+- `n` — first isolates tested against the antibiotic;
+- `n_s` — of those, results `S`;
+- `susceptibility_rate = n_s / n` with a Wilson 95% interval; `null` if `n` is
+  below `min_isolates`;
+- `traffic_light`: `green` above `green_above`, `yellow` above `yellow_above`,
+  otherwise `red`; `none` when the rate is not reported.
+
+Applicability: `reported_for="all"` always, `reported_for="urine"` only for urine
+specimens; an antibiotic is listed only if it has specimen-specific data for the
+organism. Screens are stored with `role="screen"` and filtered by the API unless
+`include_screens=true`.
+
+The minimum count (30) and the traffic-light cutoffs (`0.80` / `0.60`) are
+configurable in `Settings` and reported in `metadata.settings`.
+
+### Empiric recommendation
+
+Given a scope, unit, organism and specimen, the recommendation ranks therapeutic
+agents by cumulative susceptibility. The starting period is `last4w` (or the
+requested `annual:<year>`); when a cell has fewer than `min_isolates` isolates it
+falls back from the starting period to `annual` and then to `hospital` scope. Each
+option reports the scope and period its rate came from. A patient's own earlier
+results are history only and do not change a recommendation.
+
 ## Pipeline stages
 
 | Stage | Module | What happens |
@@ -24,8 +76,12 @@ metadata are used.
 | 1 read | `load.py` | Read + schema-validate the CSVs (fails loudly on column drift). |
 | 2 analyse | `correlate.py`, `deviations/` | Group rates, rule-based data checks and statistical outliers. |
 | 3 log | `report.py` | Write the deviation and outlier logs. No data is changed. |
-| 4 structure | `structure.py` | Build the data into a single `dataset.json`. |
+| 4 structure | `structure.py`, `antibiogram.py`, `wards.py`, `resistance_core` | Build `dataset.json` and the antibiogram matrix. |
 | 5 report | `report.py` | Rate tables and a markdown summary. |
+
+The deviation checks run on the raw records. Correlations, ward rates, outliers
+and the antibiogram run on the first-isolate view (per period for the
+antibiogram). Nothing is filtered or rewritten between stages.
 
 ### Data-derived fields
 
@@ -41,7 +97,7 @@ metadata are used.
   ESBL -> cefuroxime, CPE -> meropenem), restricted to organisms where that flag
   is observed positive in the dataset.
 
-### Deviations
+## Deviations
 
 The `consistency` family is rule-based and uses only the data. `consistency.py`
 covers cross-table and marker rules:
@@ -67,7 +123,7 @@ Every consistency finding is reported only — the analysis never removes or rew
 record. The JSON document and the evidence endpoints are built from exactly the data
 read from the CSVs.
 
-### Outliers
+## Outliers
 
 `deviations/outliers.py` reports funnel-plot outliers over the surveillance view. A
 cell's rate is compared with a reference rate through the binomial 95% control limits
@@ -76,85 +132,78 @@ cell's rate is compared with a reference rate through the binomial 95% control l
 - `ward_rate_outlier` — `organism × antibiotic × specimen × ward_code` against the same
   `ward_type` pool.
 - `weekly_rate_outlier` — `organism × antibiotic × specimen × week` against the whole
-  strand, only for weekly cells with at least 30 isolates (the reporting floor in the
-  dataset README).
+  strand, only for weekly cells with at least 30 isolates.
 
 There is no multiple-comparison control, so about 5% of cells fall outside by chance;
 the consumer filters by `n` and the cell fields on the endpoint.
-
-## Evidence model
-
-`resistance_core.TierModel` reports observed resistance only:
-
-- `observed_resistance`, `observed_n`, Wilson interval for `organism x antibiotic x
-  specimen`, or `organism x antibiotic x specimen x ward_code` when a ward is given;
-- `overall_resistance`, `overall_n`, interval for the same organism and specimen
-  across all wards;
-- `observed_source` is `ward` when the ward cell has data, otherwise `overall`.
-
-No smoothing, prior, tier cutoff, minimum count or reliability label is applied. The
-consumer sees `n` and the interval and decides what is strong enough.
 
 ## JSON
 
 `output/dataset.json`:
 
-- `metadata` — counts, date range, `as_of`, `age_band_edges`, settings, deviation
-  summary and outlier summary.
-- `antibiotics` — `antibiotic`, `antibiotic_code`, `antibiotic_fi`, `class`,
-  `reported_for`, derived `role` and `marker_flags`.
-- `wards.<ward_code>` — volumes, case mix, top `organisms`, per-organism
-  `flag_rates_by_organism`, specimen-keyed `resistance_by_antibiotic`, and an
-  organism-stratified `antibiogram` (`specimen -> organism -> [antibiotic entries]`).
-- `patients.<pid>.wards.<ward_code>.cultures[].isolates[]` with `flags`,
-  `n_resistant_classes` and `susceptibility`.
-- `antibiotic_tiers["<organism>|<specimen>"]` — observed rate lists.
-
-## Directed decision support
-
-The API implements directed, ward-aware evidence. An organism is assumed known and the
-output is an in-vitro susceptibility list, not a prescription.
-
-`POST /decision-briefs`
-
-```json
+```
 {
-  "patient_id": "P...",
-  "encounter": {"ward_code": "ICU", "admission_date": "<admission_date>"},
-  "culture": {"organism": "Escherichia coli", "specimen": "urine", "culture_date": "<culture_date>"}
+  "metadata": { source, counts, date_range, data_as_of, age_band_edges, settings,
+                scopes, periods, deviation_summary, outlier_summary },
+  "antibiotics": [ { antibiotic, antibiotic_code, antibiotic_fi, class,
+                     reported_for, role, marker_flags } ],
+  "wards": { "<ward_code>": { ward_fi, ward_en, ward_type, institution, date_range,
+             counts, cultures_by_specimen, cultures_by_result, organisms,
+             flag_rates_by_organism, basis } },
+  "patients": {
+    "<patient_id>": {
+      patient_id, sex, birth_year, home_area,
+      "wards": {
+        "<ward_code>": {
+          ward_code, ward_fi, ward_en, ward_type, institution,
+          "cultures": [
+            { culture_id, sample_date, iso_year, iso_week, age_years, specimen,
+              result, n_isolates, days_since_admission,
+              "isolates": [
+                { isolate_id, isolate_no, organism, quantity,
+                  "flags": { esbl, mrsa, vre, cpe },
+                  n_resistant_classes,
+                  "susceptibility": { "<antibiotic>": "R" | "S" } } ] } ] } } },
+  "antibiogram": {
+    "<scope>|<unit>|<period>": {
+      "<organism>|<specimen>": [ { antibiotic, antibiotic_code, class,
+          reported_for, role, n, n_s, susceptibility_rate, ci_low, ci_high,
+          traffic_light } ] } }
 }
 ```
 
-The response contains:
-
-- `options` — eligible therapeutic agents, sorted by observed resistance, with
-  `observed_n`, interval, overall rate, `observed_source`, `rank_group` and
-  data-derived warnings (`URINE_ONLY`, `PRIOR_RESISTANT`).
-- `screens` — marker results such as the cefoxitin MRSA screen, never mixed into options.
-- `excluded` — agents with `not_reported_for_specimen` or `no_specimen_data`.
-- `patient_history` — prior same-organism isolates and susceptibility.
-- `headline`, `context`, `period`, `data_as_of`, `limitations`.
-
-`rank_group` groups options whose intervals overlap, so the EHR does not present a
-meaningful difference where there is none.
+`<scope>|<unit>` is `hospital|-`, `ward|<ward_code>` or `region|<home_area>`;
+`<period>` is `annual:<year>` or `last4w`.
 
 ## HTTP API
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/health` | liveness |
-| GET | `/metadata` | counts, settings, deviation and outlier summaries |
+| GET | `/metadata` | counts, settings, available scopes and periods |
+| GET | `/antibiogram?scope=&unit=&period=&organism=&specimen=&include_screens=` | filtered susceptibility matrix |
+| GET | `/recommendations?scope=&unit=&organism=&specimen=&period=` | empiric antibiotic ranking |
+| GET | `/patients` | patient list |
 | GET | `/patients/{patient_id}` | patient summary + ward list |
-| GET | `/patients/{patient_id}/wards/{ward_code}` | single patient x single ward |
-| GET | `/wards/{ward_code}` | ward summary with `antibiogram` and `flag_rates_by_organism` |
-| GET | `/wards/{ward_code}/patients` | patients seen in a ward |
-| GET | `/wards/{ward_code}/antibiogram?specimen=&organism=` | ward evidence |
 | GET | `/patients/{patient_id}/history?organism=` | prior isolates and susceptibility |
+| GET | `/patients/{patient_id}/wards/{ward_code}` | single patient x single ward |
+| GET | `/wards/{ward_code}` | ward summary |
+| GET | `/wards/{ward_code}/patients` | patients seen in a ward |
 | GET | `/antibiotics` | antibiotic metadata derived from `antibiotics.csv` |
-| POST | `/decision-briefs` | directed decision brief |
-| GET | `/tiers/{organism}?specimen=&ward_code=` | observed rate list |
 | GET | `/deviations?family=&severity=&detector=` | consistency deviation log |
-| GET | `/outliers?detector=&severity=&organism=&antibiotic=&specimen=&ward_code=&week=&min_n=` | statistical outlier log |
+| GET | `/outliers?detector=&organism=&antibiotic=&specimen=&ward_code=&week=&min_n=` | statistical outlier log |
+
+`GET /recommendations` query (same params as `/antibiogram`; `organism` and
+`specimen` are required):
+
+```
+scope=ward&unit=ICU&organism=Escherichia%20coli&specimen=urine
+```
+
+Response: `options` (therapeutic agents ranked by susceptibility rate, with `n`,
+interval, `traffic_light` and the `source_scope` / `source_unit` / `source_period`
+the rate came from), `excluded` (`not_reported_for_specimen` or
+`no_specimen_data`), `data_as_of`, `limitations`.
 
 ## Usage
 
@@ -183,9 +232,9 @@ dev group, so no manual activation is needed. `uv run` executes inside that
 environment.
 
 Useful flags for the analysis run: `--data-dir`, `--out`, `--all-isolates`
-(disable the surveillance rule).
+(disable the first-isolate rule).
 
-The API reads the four artifacts written by the analysis step, so run the analysis
+The API reads the artifacts written by the analysis step, so run the analysis
 first. It binds `127.0.0.1:8000` by default; add `--host` / `--port` to change that.
 
 The data directory defaults to the nearest ancestor holding `patients.csv`, or that
@@ -202,15 +251,14 @@ packages/
     src/resistance_core/
       stats.py                 Wilson interval
       demographics.py          quantile age bands
-      tiers.py                 observed-resistance TierModel
       antibiotic_properties.py antibiotic metadata + marker mapping from antibiotics.csv
-      decision.py              rank groups and data-derived warnings
   analysis/   resistance-analysis    the pipeline; writes dataset.json etc.
     src/resistance_analysis/
       config.py      runtime settings
       load.py        stage 1: read + validate
-      build.py       joins, derived columns, surveillance rule
+      build.py       joins, derived columns
       resistance.py  derived resistance profile counts
+      antibiogram.py periods, first-isolate rule, scopes and susceptibility cells
       correlate.py   rates, Wilson CI, Cramer's V, chi-square
       deviations/    consistency checks (consistency.py, plausibility.py) and
                      funnel outliers (outliers.py)
@@ -222,6 +270,7 @@ packages/
   api/        resistance-api         serving layer over the artifacts
     src/resistance_api/
       app.py         FastAPI app + routes
+      responses.py   Pydantic response models
       __main__.py    `resistance-api` CLI (serve)
 ```
 
@@ -231,8 +280,12 @@ pipeline. `tests/test_boundary.py` enforces this both statically and at import t
 ## Limitations
 
 - The dataset has no diagnosis, dose, route, allergy, renal, severity or outcome data.
-  The system cannot determine the clinically correct antibiotic.
+  The system cannot determine the clinically correct antibiotic; recommendations are
+  decision support only.
 - Specimen is not a diagnosis.
+- The last-four-weeks window often has cells below 30 isolates, so it falls back to
+  the annual period and then to hospital scope.
+- VRE and CPE positives are too few for stable rates.
 - Marker mapping is a rule, but the denominator is the marker results present in
   `susceptibility.csv`.
 - Age bands and admission offsets are derived from the data distribution and change
@@ -258,43 +311,17 @@ pipeline. `tests/test_boundary.py` enforces this both statically and at import t
 Empty strings are read as null. Dates are ISO strings parsed to dates. The three
 primary keys are validated unique in `load.py` and a duplicate is a hard load error.
 A duplicate `(isolate_id, antibiotic_code)` is not a load error; it is reported as a
-`duplicate_susceptibility_key` deviation (Deviations and outliers).
+`duplicate_susceptibility_key` deviation (Deviations).
 
 ## Configuration
 
 `Settings` holds the runtime settings `data_dir`, `out_dir` and `surveillance`, plus
 the antibiogram parameters `min_isolates` (30), `green_above` (0.80) and `yellow_above`
-(0.60); both cutoffs are exclusive lower bounds. `data_dir` defaults to the nearest ancestor holding `patients.csv` or
-`data/patients.csv`, and can be overridden with `RESISTANCE_DATA_DIR` or
-`--data-dir`.
+(0.60); both cutoffs are exclusive lower bounds. `data_dir` defaults to the nearest
+ancestor holding `patients.csv` or `data/patients.csv`, and can be overridden with
+`RESISTANCE_DATA_DIR` or `--data-dir`.
 
-## Pipeline specification
-
-| Stage | Module | Action |
-|---|---|---|
-| 1 read | `load.py` | read + schema validation |
-| 2 analyse | `correlate.py`, `deviations/` | group rates, consistency checks, plausibility checks, outliers |
-| 3 log | `report.py` | write the deviation and outlier logs (no data is changed) |
-| 4 structure | `structure.py`, `wards.py`, `resistance_core` | build `dataset.json` and the antibiogram matrices |
-| 5 report | `report.py` | correlation tables + `summary.md` |
-
-The deviation checks run on the raw records. The antibiogram, correlations, ward
-rates and outliers run on the first-isolate view (spec.md §6.1). Nothing is filtered or
-rewritten between stages.
-
-### Derived fields
-
-| Field | Definition |
-|---|---|
-| `age_band` | quantile band of `cultures.age_years`; edges stored in `metadata.age_band_edges` |
-| `days_since_admission` | `sample_date - admission_date` in days; null for outpatients |
-| `is_s` / `is_r` | `susceptibility.result == "S"` / `"R"` |
-| `n_resistant_classes` | distinct `antibiotics.class` with `is_r` per isolate |
-| `n_resistant_tests` | number of resistant results per isolate |
-| `role` | `screen` if `class` or antibiotic name contains `screen` / `seulonta`, else `therapeutic` |
-| `marker_flags` | from class/name: MRSA screen → `mrsa`, glycopeptides → `vre`, cephalosporins 2nd gen → `esbl`, carbapenems → `cpe` |
-
-### Correlations
+## Correlations
 
 Outcomes: `flag:esbl`, `flag:mrsa`, `flag:vre`, `flag:cpe`, `resistance:any`,
 `resistance:antibiotic` (one stratum per antibiotic).
@@ -306,12 +333,7 @@ Metrics per outcome × predictor: per-group rate with Wilson 95% interval; chi-s
 group = largest group by n. A comparison needs ≥2 groups. Outcomes pool organisms, so
 an association can be driven by case mix.
 
-## Deviations and outliers
-
-Two log families, both reported only: `consistency` (rule-based data checks) and
-`statistical` (funnel-plot outliers). Neither changes the data.
-
-### Consistency family
+## Deviation and outlier detectors
 
 | Detector | Rule | Severity |
 |---|---|---|
@@ -335,95 +357,19 @@ Two log families, both reported only: `consistency` (rule-based data checks) and
 | `duplicate_isolate_no` | `isolate_no` repeated within a culture | warning |
 | `susceptibility_organism_mismatch` | `susceptibility.organism` ≠ the isolate organism | critical |
 | `unknown_guideline` | `guideline` is null or not `EUCAST <year>` | warning |
+| `ward_rate_outlier` | `organism × antibiotic × specimen × ward_code` outside the same-`ward_type` funnel | warning |
+| `weekly_rate_outlier` | `organism × antibiotic × specimen × week` outside the strand funnel (n ≥ 30) | warning |
 
 ESBL and CPE are mechanism flags, so a resistant marker there does not imply the flag.
-
-### Statistical family (outliers)
-
-For a cell with `n` results and `k` resistant, `k/n` is compared with a reference
-rate `p0` and the binomial 95% limits `p0 ± 1.96 · sqrt(p0(1−p0)/n)`, clamped to
-`[0, 1]`.
-
-| Detector | Cell | Reference `p0` | Floor |
-|---|---|---|---|
-| `ward_rate_outlier` | `organism × antibiotic × specimen × ward_code` | same strand within the same `ward_type` | none |
-| `weekly_rate_outlier` | `organism × antibiotic × specimen × iso_year/iso_week` | same strand across all weeks | `n ≥ 30` |
-
+For a cell with `n` results and `k` resistant, `k/n` is compared with a reference rate
+`p0` and the binomial 95% limits `p0 ± 1.96 · sqrt(p0(1−p0)/n)`, clamped to `[0, 1]`.
 There is no multiple-comparison control.
-
-## JSON document (`structure.py`)
-
-```
-{
-  "metadata": { source, counts, date_range, data_as_of, age_band_edges, settings,
-                deviation_summary, outlier_summary },
-  "antibiotics": [ { antibiotic, antibiotic_code, antibiotic_fi, class,
-                     reported_for, role, marker_flags } ],
-  "wards": { "<ward_code>": { ward_fi, ward_en, ward_type, institution, date_range,
-             counts, cultures_by_specimen, cultures_by_result, organisms,
-             flag_rates_by_organism } },
-  "patients": {
-    "<patient_id>": {
-      patient_id, sex, birth_year, home_area,
-      "wards": {
-        "<ward_code>": {
-          ward_code, ward_fi, ward_en, ward_type, institution,
-          "cultures": [
-            { culture_id, sample_date, iso_year, iso_week, age_years, specimen,
-              result, n_isolates, days_since_admission,
-              "isolates": [
-                { isolate_id, isolate_no, organism, quantity,
-                  "flags": { esbl, mrsa, vre, cpe },
-                  n_resistant_classes,
-                  "susceptibility": { "<antibiotic>": "R" | "S" } } ] } ] } } },
-  "antibiogram": {
-    "<scope>|<unit>|<period>": {
-      "<organism>|<specimen>": [ { antibiotic, antibiotic_code, class,
-          reported_for, role, n, n_s, susceptibility_rate, ci_low, ci_high,
-          traffic_light } ] } }
-}
-```
-
-`<scope>|<unit>` is `hospital|-`, `ward|<ward_code>` or `region|<home_area>`;
-`<period>` is `annual:<year>` or `last4w`.
-
-## HTTP API specification
-
-| Method | Path | Notes |
-|---|---|---|
-| GET | `/health` | `{"status":"ok"}` |
-| GET | `/metadata` | document metadata, available scopes and periods |
-| GET | `/antibiogram?scope=&unit=&period=&organism=&specimen=` | filtered matrix (spec.md §6) |
-| POST | `/recommendations` | empiric recommendation (spec.md §6.4) |
-| GET | `/antibiotics` | metadata derived from `antibiotics.csv` |
-| GET | `/wards/{ward_code}` | ward summary |
-| GET | `/patients` | *nice to have:* patient list |
-| GET | `/patients/{patient_id}` | *nice to have:* summary + ward list |
-| GET | `/patients/{patient_id}/history` | *nice to have:* prior isolates and susceptibility |
-| GET | `/deviations?family=&severity=&detector=` | consistency deviation log |
-| GET | `/outliers?detector=&organism=&antibiotic=&specimen=&ward_code=&week=&min_n=` | statistical outlier log |
-
-`POST /recommendations` request:
-
-```json
-{
-  "scope": "ward",
-  "unit": "ICU",
-  "organism": "Escherichia coli",
-  "specimen": "urine"
-}
-```
-
-Response: `options` (therapeutic agents ranked by susceptibility rate, with `n`,
-interval, `traffic_light`, and the scope and period the rate came from), `excluded`
-(`not_reported_for_specimen` or `no_specimen_data`), `data_as_of`, `limitations`.
 
 ## CLI and outputs
 
 ```
 uv run resistance-analysis --out output [--data-dir ...]
 uv run resistance-api --dataset output/dataset.json
-                      --analytics output/analytics.csv
                       --deviations output/deviations.csv
                       --outliers output/outliers.csv
 ```
@@ -431,29 +377,3 @@ uv run resistance-api --dataset output/dataset.json
 Outputs: `dataset.json`, `analytics.csv`, `deviations.csv` / `deviations.jsonl`,
 `outliers.csv` / `outliers.jsonl`, `report/correlations_summary.csv`,
 `report/group_rates.csv`, `summary.md`.
-
-## Conflicts
-
-The sections from the top of this file down to Limitations describe the current
-implementation. The sections from Columns read onward are the specification moved
-from `spec.md`. They disagree on the following points.
-
-| Topic | Current implementation | Specification |
-|---|---|---|
-| Thresholds | Intro: no thresholds are used. Evidence model: no tier cutoff, minimum count or reliability label. | `min_isolates` (30) reporting floor and traffic light cutoffs `green_above` (0.80) / `yellow_above` (0.60) in `Settings`. |
-| Rate measured | Resistance: `observed_resistance`, `overall_resistance` (share R). | Susceptibility: `susceptibility_rate = n_s / n` (share S). |
-| Small cells | A rate is always reported; the consumer judges `n` and the interval. | `susceptibility_rate` is null and `traffic_light` is `none` when `n < 30`. |
-| Fallback | `observed_source`: the ward cell if it has data, otherwise all wards (`overall`). | `last4w` → `annual` → `hospital` scope while `n < 30`; the response states which scope and period each rate came from. |
-| Scopes and periods | Ward or overall, with no period dimension in the evidence model. | `hospital`, `ward` (inpatient) and `region` (outpatient `home_area`), each split into `annual:<year>` and `last4w`. |
-| Pipeline stage 4 | `structure.py` builds `dataset.json`. | `structure.py`, `wards.py` and `resistance_core` build `dataset.json` and the antibiogram matrices. |
-| Marker flags | Mapped by antibiotic: cefoxitin screen → MRSA, vancomycin → VRE, cefuroxime → ESBL, meropenem → CPE. Flag denominators are limited to organisms where the flag is observed positive. | Mapped by class or name: MRSA screen → `mrsa`, glycopeptides → `vre`, 2nd-gen cephalosporins → `esbl`, carbapenems → `cpe`. No organism restriction is stated. |
-| JSON `metadata` | `as_of` | `data_as_of`, plus `source` |
-| JSON `wards` | Includes `resistance_by_antibiotic` and a per-ward `antibiogram` (`specimen -> organism -> [entries]`). | Has neither; the antibiogram is top-level and keyed `<scope>\|<unit>\|<period>` → `<organism>\|<specimen>`. |
-| JSON tiers | `antibiotic_tiers["<organism>\|<specimen>"]` | Absent. |
-| Decision endpoint | `POST /decision-briefs` with `patient_id`, `encounter` (`ward_code`, `admission_date`) and `culture` (`organism`, `specimen`, `culture_date`). | `POST /recommendations` with `scope`, `unit`, `organism` and `specimen`; no patient input. |
-| Decision response | `options` sorted by observed resistance, with `rank_group` and warnings (`URINE_ONLY`, `PRIOR_RESISTANT`); also `screens`, `patient_history`, `headline`, `context`, `period`. | `options` ranked by susceptibility rate, with `traffic_light` and the source scope and period; `excluded`, `data_as_of`, `limitations`. A patient's own earlier results are history only and do not change the recommendation, which conflicts with `PRIOR_RESISTANT`. |
-| Endpoints only in the current implementation | `/patients/{patient_id}/wards/{ward_code}`, `/wards/{ward_code}/patients`, `/wards/{ward_code}/antibiogram`, `/decision-briefs`, `/tiers/{organism}` | — |
-| Endpoints only in the specification | — | `/antibiogram`, `/recommendations`, `/patients` |
-| Endpoint parameters | `/patients/{patient_id}/history?organism=`; `/outliers` accepts `severity`. | `/patients/{patient_id}/history` has no `organism` filter; `/outliers` has no `severity` parameter. |
-| `/metadata` | Counts, settings, deviation and outlier summaries. | Document metadata plus the available scopes and periods. |
-| `core` modules | `tiers.py` (TierModel) and `decision.py` (rank groups, warnings) implement the resistance evidence model. | No package implements `susceptibility_rate`, `traffic_light`, `min_isolates` or `/recommendations` yet. |
