@@ -14,26 +14,6 @@ Description:
 
 liirum laarum
 
-### Project structure
-
-- data
-
-  liirum laarum
-
-- server
-
-  liirum laarum
-
-- server_spec.md
-
-  liirum laarum
-
-- user_stories.md
-
-  liirum laarum
-
-
-
 ## Future plans
 
 ### Interviews with Healthcare Professionals
