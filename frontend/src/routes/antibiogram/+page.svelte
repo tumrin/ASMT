@@ -55,16 +55,25 @@
 	function cellFor(cells: AntibioticCell[], code: string): AntibioticCell | undefined {
 		return cells.find((cell) => cell.antibiotic_code === code);
 	}
+
+	function printAntibiogram() {
+		window.print();
+	}
 </script>
 
 <svelte:head>
 	<title>Antibiogram</title>
 </svelte:head>
 
-<h1>Antibiogram</h1>
+<div class="page-heading">
+	<h1>Antibiogram</h1>
+	<button type="button" onclick={printAntibiogram} disabled={loading || !data}>
+		Print / Save PDF
+	</button>
+</div>
 
 <div class="filters">
-	<label>
+	<label class="screen-only">
 		Organism
 		<select bind:value={organism}>
 			<option value="">All organisms</option>
@@ -74,7 +83,7 @@
 		</select>
 	</label>
 
-	<label>
+	<label class="screen-only">
 		Specimen
 		<select bind:value={specimen}>
 			<option value="">All</option>
@@ -84,7 +93,7 @@
 		</select>
 	</label>
 
-	<label>
+	<label class="screen-only">
 		Ward
 		<select bind:value={unit}>
 			<option value="-">All</option>
@@ -94,7 +103,7 @@
 		</select>
 	</label>
 
-	<label>
+	<label class="screen-only">
 		Period
 		<select bind:value={periodKind}>
 			<option value="annual">Annual</option>
@@ -119,6 +128,13 @@
 {:else if error}
 	<p>Error: {error}</p>
 {:else if data}
+	<p class="print-only">
+		Filters: {organism ? organismName(organism) : 'All organisms'} ·
+		{specimen ? specimenName(specimen) : 'All specimens'} ·
+		{unit === '-' ? 'Hospital' : (WARD_NAMES[unit] ?? unit)} ·
+		{data.period}
+	</p>
+	<p>Period: {data.period} · Data as of {data.data_as_of ?? 'unknown'}</p>
 	{#if data.organisms.length === 0}
 		<p>No results for these filters.</p>
 	{:else}
@@ -157,5 +173,83 @@
 <style>
 	.filters {
 		margin: 1rem 0;
+	}
+	.page-heading {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
+	}
+
+	.page-heading button {
+		padding: 0.5rem 0.75rem;
+		border: 1px solid #52657f;
+		border-radius: 4px;
+		background: #fff;
+		color: #122033;
+		font: inherit;
+		font-weight: 600;
+		cursor: pointer;
+	}
+
+	.page-heading button:disabled {
+		cursor: not-allowed;
+		opacity: 0.55;
+	}
+
+	.print-only {
+		display: none;
+	}
+
+	@media print {
+		@page {
+			size: landscape;
+			margin: 10mm;
+		}
+
+		:global(body) {
+			color: #000;
+			font-size: 9pt;
+		}
+
+		:global(.app-header),
+		.screen-only,
+		.page-heading button {
+			display: none !important;
+		}
+
+		.page-heading {
+			margin-bottom: 0.5rem;
+		}
+
+		h1 {
+			margin: 0;
+			font-size: 18pt;
+		}
+
+		.print-only {
+			display: block;
+		}
+
+		table {
+			width: 100%;
+			border-collapse: collapse;
+			font-size: 7pt;
+			break-inside: auto;
+		}
+
+		thead {
+			display: table-header-group;
+		}
+
+		tr {
+			break-inside: avoid;
+		}
+
+		th,
+		td {
+			padding: 2px;
+			print-color-adjust: exact;
+		}
 	}
 </style>
