@@ -23,6 +23,13 @@ cutoffs.
 
 ## Antibiogram model
 
+### Organism names
+
+On load, `organism` in `isolates.csv` and `susceptibility.csv` is normalized: trim
+surrounding whitespace, lowercase, then replace each run of `.` and whitespace with
+`_` (`Escherichia coli` → `escherichia_coli`). Every output and API value uses the
+normalized name.
+
 ### Periods and first-isolate rule
 
 | Period | Window |
