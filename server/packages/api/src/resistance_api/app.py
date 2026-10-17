@@ -27,6 +27,10 @@ from .responses import (
 EXCLUSION_NOT_REPORTED_FOR_SPECIMEN = "not_reported_for_specimen"
 EXCLUSION_NO_SPECIMEN_DATA = "no_specimen_data"
 
+# Inpatient onset scopes resolve to the whole-ward rate when their own cell is below
+# the reporting floor, then to hospital (analysis: antibiogram.py, spec §6.4).
+ONSET_SCOPES = ("ward-early", "ward-late")
+
 LIMITATIONS = [
     "In-vitro susceptibility only; the dataset has no outcome, dose, allergy or renal data.",
     "Specimen is not a diagnosis.",
@@ -44,9 +48,10 @@ either read from the dataset or derived arithmetically from it; the API adds no
 clinical thresholds beyond the configurable reporting floor and traffic-light
 cutoffs.
 
-The antibiogram is the susceptibility matrix per scope (hospital, inpatient ward
-or outpatient region) and period (calendar year or the last four weeks). The
-recommendation endpoint ranks agents by cumulative susceptibility.
+The antibiogram is the susceptibility matrix per scope (hospital, inpatient ward,
+inpatient onset sub-scope or outpatient region) and period (calendar year or the
+last four weeks). The recommendation endpoint ranks agents by cumulative
+susceptibility.
 
 This is an unauthenticated local exploration service: there is no
 authentication, authorisation or pagination.
@@ -155,6 +160,10 @@ def _fallback_chain(
     keys = [f"{scope}|{unit}|{base_period}"]
     if annual_period != base_period:
         keys.append(f"{scope}|{unit}|{annual_period}")
+    if scope in ONSET_SCOPES:
+        keys.append(f"ward|{unit}|{base_period}")
+        if annual_period != base_period:
+            keys.append(f"ward|{unit}|{annual_period}")
     if scope != "hospital" or unit != "-":
         keys.append(f"hospital|-|{base_period}")
         if annual_period != base_period:
@@ -397,7 +406,10 @@ def create_app(dataset_path: str | Path) -> FastAPI:
     def get_antibiogram(
         scope: str = Query(
             default="hospital",
-            description="`hospital`, `ward` (inpatient) or `region` (outpatient).",
+            description=(
+                "`hospital`, `ward` (inpatient), `ward-early` / `ward-late` "
+                "(inpatient by onset) or `region` (outpatient)."
+            ),
         ),
         unit: str = Query(
             default="-", description="Ward code or home area; `-` for hospital."
@@ -463,15 +475,19 @@ def create_app(dataset_path: str | Path) -> FastAPI:
         description=(
             "Agents for a known organism and specimen, ranked by cumulative "
             "susceptibility. Cells below the minimum count fall back from last4w to "
-            "annual and then to hospital scope; each option reports the scope and "
-            "period its rate came from. Decision support, not a prescription."
+            "annual and then to hospital scope; an onset scope falls back to its ward "
+            "first. Each option reports the scope and period its rate came from. "
+            "Decision support, not a prescription."
         ),
         response_model=RecommendationsResponse,
     )
     def get_recommendation(
         scope: str = Query(
             default="hospital",
-            description="`hospital`, `ward` (inpatient) or `region` (outpatient).",
+            description=(
+                "`hospital`, `ward` (inpatient), `ward-early` / `ward-late` "
+                "(inpatient by onset) or `region` (outpatient)."
+            ),
         ),
         unit: str = Query(
             default="-", description="Ward code or home area; `-` for hospital."
@@ -484,12 +500,25 @@ def create_app(dataset_path: str | Path) -> FastAPI:
             default=None,
             description="Starting period, e.g. `last4w` (default) or `annual:2024`.",
         ),
+        days_since_admission: int | None = Query(
+            default=None,
+            description=(
+                "Days since admission for an inpatient; with scope `ward` it selects "
+                "the onset sub-scope (`ward-early` below `hospital_onset_days`, "
+                "`ward-late` at or above)."
+            ),
+        ),
     ) -> dict[str, object]:
         doc = app.state.doc
         metadata = doc.get("metadata", {})
         matrix = doc.get("antibiogram", {})
         periods = metadata.get("periods", [])
-        min_isolates = int(metadata.get("settings", {}).get("min_isolates", 30))
+        settings = metadata.get("settings", {})
+        min_isolates = int(settings.get("min_isolates", 30))
+        onset_days = int(settings.get("hospital_onset_days", 3))
+
+        if scope == "ward" and days_since_admission is not None:
+            scope = "ward-early" if days_since_admission < onset_days else "ward-late"
 
         base_period = period or "last4w"
         annual_period = (

@@ -26,15 +26,16 @@ Frontend: see `frontend/README.md`.
    isolates tested S) of each antibiotic for each organism × specimen type present in
    the data. Each rate includes the number of isolates used.
    - Count the **first isolate per patient per species per specimen type per
-     period** (§6.1).
+     period** (§6.1), applied per setting for the ward and region scopes.
    - Report a rate only when the cell has **at least 30 isolates**; smaller cells are
      returned with their `n` and a null rate.
 2. **Antibiogram view.** A matrix of organisms (rows) × antibiotics (columns).
    - Each row is one organism × specimen type pair: *E. coli* (urine) and *E. coli*
      (blood) are separate rows.
    - **Scope:** whole hospital, or a single unit. The smallest unit depends on
-     `ward_type` (§6.2): inpatient (`in`) data is broken down by **ward**, outpatient
-     (`out`) data by **region**.
+     `ward_type` (§6.2): inpatient (`in`) data is broken down by **ward** (and, by
+     onset, into **community-onset** and **hospital-onset**), outpatient (`out`) data
+     by **region**.
    - **Period:** **annual** (calendar year) and **last four weeks** (the 28 days
      ending at the dataset's latest `sample_date`).
    - Shows all organisms by default; an optional organism filter narrows it. All
@@ -97,6 +98,10 @@ name.
 Within each period, only the first isolate per `patient_id × organism × specimen` is
 counted, ordered by `sample_date, isolate_id`. The rule is applied per period, so a
 patient can contribute one isolate to each year and one to the last-four-weeks window.
+For the `ward` and `region` scopes the rule is applied per setting
+(`patient_id × organism × specimen × ward_type`), so inpatient and outpatient data
+never suppress each other; the `hospital` scope spans settings and keeps the single
+global first isolate.
 
 ### 6.2 Scope
 
@@ -104,7 +109,13 @@ patient can contribute one isolate to each year and one to the last-four-weeks w
 |---|---|
 | `hospital` | all cultures |
 | `ward` | cultures with that `ward_code`, for wards with `ward_type = in` |
+| `ward-early` | inpatient cultures with `days_since_admission` below `hospital_onset_days` (community-onset) |
+| `ward-late` | inpatient cultures with `days_since_admission` at or above `hospital_onset_days` (hospital-onset) |
 | `region` | cultures from `ward_type = out` units, grouped by the patient's `home_area` |
+
+The onset sub-scopes partition the inpatient isolates using the same first-isolate
+rule, so a fresh admission and a long stay track their own observed rates. A culture
+without an `admission_date` is counted in `ward` only.
 
 ### 6.3 Cell
 
@@ -112,7 +123,7 @@ For each scope × period × organism × specimen × antibiotic:
 
 - `n` — first isolates tested against the antibiotic;
 - `n_s` — of those, results `S`;
-- `susceptibility_rate = n_s / n`, with a Wilson 95% interval; null if `n < 30`;
+- `susceptibility_rate = n_s / n`; null if `n < 30`;
 - `traffic_light`:
 
 | Light | Rule |
@@ -132,9 +143,10 @@ organism. Screens are excluded unless `include_screens=True`.
 ### 6.4 Empiric recommendation
 
 Given a scope (ward or region), organism and specimen, the recommendation is the
-matching antibiogram row for the `last4w` period, falling back to `annual` and then to
-`hospital` scope when the cell has `n < 30`. Agents are ranked by susceptibility rate;
-the response states which scope and period each rate came from.
+matching antibiogram row for the `last4w` period, falling back to `annual`, then from
+an onset scope (`ward-early` / `ward-late`) to its `ward`, and finally to `hospital`
+scope when the cell has `n < 30`. Agents are ranked by susceptibility rate; the
+response states which scope and period each rate came from.
 
 ## 7. Assumptions
 
@@ -142,8 +154,8 @@ the response states which scope and period each rate came from.
   new patient and use cumulative rates only.
 - **A2** Susceptibility is S/R only; no I, MIC or zone diameter.
 - **A3** A missing susceptibility row means "not tested", not "susceptible".
-- **A4** The only thresholds are the 30-isolate reporting floor and the traffic light
-  cutoffs (§6.3), both configurable.
+- **A4** The only thresholds are the 30-isolate reporting floor, the traffic light
+  cutoffs (§6.3) and the hospital-onset day count (§6.2), all configurable.
 - **A5** "Region" for outpatient units is the patient's `home_area`.
 - **A6** "Last four weeks" is relative to the latest `sample_date` in the data, not
   today's date.
@@ -151,6 +163,8 @@ the response states which scope and period each rate came from.
   there is no taxonomy normalisation (e.g. `E. coli` and `Escherichia coli` stay
   distinct).
 - **A8** Findings are reported only; the data is never rewritten.
+- **A9** Onset is measured from `admission_date`; a culture without one has no onset
+  and is counted in `ward` only.
 
 ## 8. Limitations and non-goals
 

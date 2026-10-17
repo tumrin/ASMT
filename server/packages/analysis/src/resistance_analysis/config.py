@@ -29,10 +29,14 @@ class Settings:
     # Exclusive lower bounds for the traffic light: green above, yellow above.
     green_above: float = 0.80
     yellow_above: float = 0.60
+    # An inpatient culture is hospital-onset at or after this many days since
+    # admission; earlier cultures are community-onset (the "3-day rule").
+    hospital_onset_days: int = 3
 
     def to_json(self) -> dict[str, object]:
         return {
             "min_isolates": self.min_isolates,
             "green_above": self.green_above,
             "yellow_above": self.yellow_above,
+            "hospital_onset_days": self.hospital_onset_days,
         }

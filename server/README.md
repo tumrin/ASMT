@@ -42,13 +42,29 @@ is counted, ordered by `sample_date, isolate_id`. The rule is applied per period
 so a patient can contribute one isolate to each year and one to the
 last-four-weeks window.
 
+Ward and region scopes are kept independent by applying the rule per setting:
+they count the first isolate per `patient_id × organism × specimen × ward_type`,
+so a patient seen both as an inpatient and as an outpatient contributes one first
+isolate to each scope instead of one setting suppressing the other. The hospital
+scope spans settings and keeps the single global first isolate per
+`patient_id × organism × specimen`.
+
 ### Scope
 
 | Scope | Includes |
 |---|---|
 | `hospital` | all cultures (`unit` is `-`) |
 | `ward` | cultures with that `ward_code`, for wards with `ward_type = in` |
+| `ward-early` | inpatient cultures with `days_since_admission` below `hospital_onset_days` (community-onset) |
+| `ward-late` | inpatient cultures with `days_since_admission` at or above `hospital_onset_days` (hospital-onset) |
 | `region` | cultures from `ward_type = out` units, grouped by the patient's `home_area` |
+
+The `ward-early` / `ward-late` sub-scopes partition the ward's counted isolates (the
+same per-setting first-isolate rule), so a fresh admission and a long stay track their
+own data. A culture without an `admission_date` is counted in `ward` only. Because the
+onset scope reports its own observed rate, the recommendation follows the data
+automatically: if community-onset cultures drift toward community resistance, so does
+`ward-early`.
 
 ### Cell
 
@@ -56,7 +72,7 @@ For each scope × period × organism × specimen × antibiotic:
 
 - `n` — first isolates tested against the antibiotic;
 - `n_s` — of those, results `S`;
-- `susceptibility_rate = n_s / n` with a Wilson 95% interval; `null` if `n` is
+- `susceptibility_rate = n_s / n`; `null` if `n` is
   below `min_isolates`;
 - `traffic_light`: `green` above `green_above`, `yellow` above `yellow_above`,
   otherwise `red`; `none` when the rate is not reported.
@@ -74,7 +90,8 @@ configurable in `Settings` and reported in `metadata.settings`.
 Given a scope, unit, organism and specimen, the recommendation ranks therapeutic
 agents by cumulative susceptibility. The starting period is `last4w` (or the
 requested `annual:<year>`); when a cell has fewer than `min_isolates` isolates it
-falls back from the starting period to `annual` and then to `hospital` scope. Each
+falls back from the starting period to `annual`, then from an onset scope
+(`ward-early` / `ward-late`) to its `ward`, and finally to `hospital` scope. Each
 option reports the scope and period its rate came from. A patient's own earlier
 results are history only and do not change a recommendation.
 
@@ -117,12 +134,12 @@ outpatients) and the `is_s` / `is_r` outcome flags. No other fields are derived.
   "antibiogram": {
     "<scope>|<unit>|<period>": {
       "<organism>|<specimen>": [ { antibiotic, antibiotic_code, class,
-          reported_for, role, n, n_s, susceptibility_rate, ci_low, ci_high,
-          traffic_light } ] } }
+          reported_for, role, n, n_s, susceptibility_rate, traffic_light } ] } }
 }
 ```
 
-`<scope>|<unit>` is `hospital|-`, `ward|<ward_code>` or `region|<home_area>`;
+`<scope>|<unit>` is `hospital|-`, `ward|<ward_code>`, `ward-early|<ward_code>`,
+`ward-late|<ward_code>` or `region|<home_area>`;
 `<period>` is `annual:<year>` or `last4w`. `role` is `screen` or `therapeutic`,
 derived from the antibiotic's class or name in `antibiotics.csv`. `flags` are the
 raw `esbl` / `mrsa` / `vre` / `cpe` columns from `isolates.csv`.
@@ -150,8 +167,12 @@ raw `esbl` / `mrsa` / `vre` / `cpe` columns from `isolates.csv`.
 scope=ward&unit=ICU&organism=Escherichia%20coli&specimen=urine
 ```
 
+With `scope=ward` and `days_since_admission=<n>`, the backend selects the onset
+sub-scope (`ward-early` / `ward-late`) from `hospital_onset_days`, so a caller does
+not have to choose it. The response `scope` is the resolved scope.
+
 Response: `options` (therapeutic agents ranked by susceptibility rate, with `n`,
-interval, `traffic_light` and the `source_scope` / `source_unit` / `source_period`
+`traffic_light` and the `source_scope` / `source_unit` / `source_period`
 the rate came from), `excluded` (`not_reported_for_specimen` or
 `no_specimen_data`), `data_as_of`, `limitations`.
 
@@ -227,7 +248,6 @@ A `uv` workspace of three packages: analysis writes the artifact, the API reads 
 packages/
   core/       resistance-core        shared, dependency-light domain logic
     src/resistance_core/
-      stats.py                 Wilson interval
       antibiotic_properties.py antibiotic metadata (class, reported_for, role) from antibiotics.csv
   analysis/   resistance-analysis    the pipeline; writes dataset.json
     src/resistance_analysis/
@@ -281,7 +301,9 @@ primary keys (`patient_id`, `culture_id`, `isolate_id`) are validated unique in
 ## Configuration
 
 `Settings` holds the runtime settings `data_dir` and `out_dir`, plus the
-antibiogram parameters `min_isolates` (30), `green_above` (0.80) and `yellow_above`
-(0.60); both cutoffs are exclusive lower bounds. `data_dir` defaults to the nearest
-ancestor holding `patients.csv` or `data/patients.csv`, and can be overridden with
-`RESISTANCE_DATA_DIR` or `--data-dir`.
+antibiogram parameters `min_isolates` (30), `green_above` (0.80), `yellow_above`
+(0.60) and `hospital_onset_days` (3). Both cutoffs are exclusive lower bounds; the
+onset threshold splits inpatient cultures into `ward-early` (below) and `ward-late`
+(at or above). `data_dir` defaults to the nearest ancestor holding `patients.csv` or
+`data/patients.csv`, and can be overridden with `RESISTANCE_DATA_DIR` or
+`--data-dir`.

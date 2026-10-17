@@ -34,6 +34,20 @@ npm run build         # production build
 npm run preview       # serve the production build
 ```
 
+### Icons
+
+Use Iconify's Svelte component with individual MDI icon imports. This bundles only
+the icons used and does not fetch icon data at runtime:
+
+```svelte
+<script lang="ts">
+  import Icon from '@iconify/svelte';
+  import home from '@iconify-icons/mdi/home';
+</script>
+
+<Icon icon={home} />
+```
+
 The views call the backend API, so start it first (see Development in
 `server/README.md`); it serves on `http://127.0.0.1:8000`. The frontend fetches
 `/api/*`, and the Vite server (`npm run dev` and `npm run preview`) proxies those
@@ -49,9 +63,9 @@ cp .env.example .env.development   # npm run dev
 cp .env.example .env.production    # npm run build / npm run preview
 ```
 
-| Variable | Required | Example | Description |
-|---|---|---|---|
-| `API_URL` | yes | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
+| Variable  | Required | Example                 | Description                                   |
+| --------- | -------- | ----------------------- | --------------------------------------------- |
+| `API_URL` | yes      | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
 
 `API_URL` is only read by `vite.config.ts` (via `loadEnv`), so it never reaches
 browser code. `.env.example` is committed; every other `.env*` file is gitignored.
@@ -90,7 +104,7 @@ moved from `spec.md`.
 ### Antibiogram (spec.md §3.2)
 
 - A matrix of organisms (rows) × antibiotics (columns). Each row is one
-  organism × specimen type pair, so *E. coli* (urine) and *E. coli* (blood) are
+  organism × specimen type pair, so _E. coli_ (urine) and _E. coli_ (blood) are
   separate rows.
 - Controls for scope (`hospital`, `ward` for inpatient units, `region` for outpatient
   `home_area`), period (`annual:<year>`, `last4w`) and an optional organism filter.
@@ -106,7 +120,7 @@ moved from `spec.md`.
 
 - Input: scope and unit, organism and specimen.
 - `POST /recommendations` returns `options` ranked by susceptibility rate, each with
-  `n`, interval, `traffic_light` and the scope and period the rate came from; show
+  `n`, `traffic_light` and the scope and period the rate came from; show
   the source scope and period next to each rate, since fallback can make it differ
   from the requested one.
 - Show `excluded` agents with their reason, plus `data_as_of` and `limitations`.
@@ -138,5 +152,6 @@ implemented yet:
 
 - Recommendations and patient views.
 - API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
-- PDF export: no PDF library chosen.
+- PDF export: the antibiogram uses the browser's print dialog, including the active
+  filters; patient-view export is not implemented.
 - Deployment adapter: `adapter-auto` is still in place.
