@@ -134,7 +134,6 @@
 		{unit === '-' ? 'Hospital' : (WARD_NAMES[unit] ?? unit)} ·
 		{data.period}
 	</p>
-	<p>Period: {data.period} · Data as of {data.data_as_of ?? 'unknown'}</p>
 	{#if data.organisms.length === 0}
 		<p>No results for these filters.</p>
 	{:else}
