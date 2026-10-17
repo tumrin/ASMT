@@ -1,5 +1,5 @@
 // Antibiotic code (as served by the backend) -> Finnish display name (antibiotics.csv antibiotic_fi).
-export const ANTIBIOTIC_NAMES: Record<string, string> = {
+export const ANTIBIOTIC_NAMES: Record<AntibioticCode, string> = {
 	AMP: 'ampisilliini',
 	MEC: 'mesillinaami',
 	TZP: 'piperasilliini-tatsobaktaami',
@@ -14,6 +14,8 @@ export const ANTIBIOTIC_NAMES: Record<string, string> = {
 	VAN: 'vankomysiini',
 	CLI: 'klindamysiini'
 };
+
+export type AntibioticCode = string;
 
 // Falls back to the code itself for antibiotics missing from the map.
 export function antibioticName(code: string): string {

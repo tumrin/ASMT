@@ -4,7 +4,7 @@
 		type AntibioticCell,
 		type AntibiogramResponse
 	} from '#lib/antibiogram.js';
-	import { antibioticName } from '#lib/antibiotics.js';
+	import { ANTIBIOTIC_NAMES, antibioticName, type AntibioticCode } from '#lib/antibiotics.js';
 	import { ORGANISM_NAMES, organismName } from '#lib/organisms.js';
 	import { SPECIMEN_NAMES, specimenName } from '#lib/specimens.js';
 	import { trafficLightColor } from '#lib/trafficlight.js';
@@ -42,18 +42,15 @@
 		return () => controller.abort();
 	});
 
-	// Rows only list their own agents, so columns are the union across rows.
-	let columns = $derived.by(() => {
-		const codes = new Set<string>();
-		for (const row of data?.organisms ?? []) {
-			for (const cell of row.antibiotics) codes.add(cell.antibiotic_code);
-		}
-		return [...codes].sort((a, b) => antibioticName(a).localeCompare(antibioticName(b), 'fi'));
-	});
+	// Every known antibiotic is a column, whether or not the current rows report it.
+	const columns: AntibioticCode[] = Object.keys(ANTIBIOTIC_NAMES).sort((a, b) =>
+		antibioticName(a).localeCompare(antibioticName(b), 'fi')
+	);
 
 	function cellFor(cells: AntibioticCell[], code: string): AntibioticCell | undefined {
 		return cells.find((cell) => cell.antibiotic_code === code);
-	}</script>
+	}
+</script>
 
 <svelte:head>
 	<title>Antibiogram</title>
