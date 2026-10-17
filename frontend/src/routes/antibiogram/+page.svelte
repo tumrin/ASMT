@@ -200,6 +200,15 @@
 		display: none;
 	}
 
+	th {
+		padding: 0.5rem;
+	}
+
+	td {
+		text-align: center;
+		vertical-align: middle;
+	}
+
 	@media print {
 		@page {
 			size: landscape;
