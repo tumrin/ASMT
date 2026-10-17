@@ -6,12 +6,16 @@ from typing import Any
 
 import polars as pl
 from resistance_core.antibiotic_properties import metadata_by_code
-from resistance_core.stats import wilson_interval
 
 from .config import Settings
 
 LAST4W = "last4w"
 LAST4W_DAYS = 28
+
+# Inpatient sub-scopes by onset (spec §6.2): a culture is hospital-onset at or after
+# `Settings.hospital_onset_days` days since admission, community-onset before that.
+WARD_EARLY = "ward-early"
+WARD_LATE = "ward-late"
 
 
 @dataclass
@@ -39,22 +43,40 @@ def _first_isolates(
     isolates: pl.DataFrame,
     windows: dict[str, tuple[date, date]],
 ) -> pl.DataFrame:
-    """One isolate per patient x organism x specimen per period, earliest first."""
+    """First isolate per patient x organism x specimen x setting per period.
+
+    Splitting by ``ward_type`` keeps inpatient (ward) and outpatient (region) scopes
+    independent: a patient seen in both settings contributes one first isolate to each
+    instead of one setting suppressing the other. ``is_global_first`` marks the earliest
+    isolate across settings, which the hospital scope counts (spec §6.1).
+    """
     frames: list[pl.DataFrame] = []
     for label, (start, end) in windows.items():
         window = isolates.filter(
             (pl.col("sample_date") >= start) & (pl.col("sample_date") <= end)
-        )
-        picked = (
-            window.sort("sample_date", "isolate_id")
-            .group_by("patient_id", "organism", "specimen", maintain_order=True)
-            .agg(pl.col("isolate_id").first().alias("isolate_id"))
-        )
+        ).sort("sample_date", "isolate_id")
+        setting_first = window.group_by(
+            "patient_id", "organism", "specimen", "ward_type", maintain_order=True
+        ).agg(pl.col("isolate_id").first().alias("isolate_id"))
+        global_first = window.group_by(
+            "patient_id", "organism", "specimen", maintain_order=True
+        ).agg(pl.col("isolate_id").first().alias("isolate_id"))
         frames.append(
-            picked.select("isolate_id").with_columns(pl.lit(label).alias("period"))
+            setting_first.select("isolate_id").with_columns(
+                pl.col("isolate_id")
+                .is_in(global_first["isolate_id"].to_list())
+                .alias("is_global_first"),
+                pl.lit(label).alias("period"),
+            )
         )
     if not frames:
-        return pl.DataFrame(schema={"isolate_id": pl.String, "period": pl.String})
+        return pl.DataFrame(
+            schema={
+                "isolate_id": pl.String,
+                "is_global_first": pl.Boolean,
+                "period": pl.String,
+            }
+        )
     return pl.concat(frames)
 
 
@@ -78,7 +100,6 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
     n_s = int(row["n_s"])
     if n >= settings.min_isolates:
         rate = n_s / n
-        low, high = wilson_interval(n_s, n)
         return {
             "antibiotic": row["antibiotic"],
             "antibiotic_code": row["antibiotic_code"],
@@ -88,8 +109,6 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
             "n": n,
             "n_s": n_s,
             "susceptibility_rate": round(rate, 4),
-            "ci_low": round(low, 4),
-            "ci_high": round(high, 4),
             "traffic_light": _traffic_light(rate, settings),
         }
     return {
@@ -101,23 +120,35 @@ def _entry(row: dict[str, Any], role: str, settings: Settings) -> dict[str, Any]
         "n": n,
         "n_s": n_s,
         "susceptibility_rate": None,
-        "ci_low": None,
-        "ci_high": None,
         "traffic_light": "none",
     }
 
 
-def _scoped_rows(rows: pl.DataFrame) -> pl.DataFrame:
-    hospital = rows.with_columns(
+def _scoped_rows(rows: pl.DataFrame, settings: Settings) -> pl.DataFrame:
+    # Ward and region count the first isolate per setting; hospital keeps the global
+    # first isolate across settings (spec §6.1).
+    hospital = rows.filter(pl.col("is_global_first")).with_columns(
         pl.lit("hospital").alias("scope"), pl.lit("-").alias("unit")
     )
-    ward = rows.filter(pl.col("ward_type") == "in").with_columns(
+    inpatients = rows.filter(pl.col("ward_type") == "in")
+    ward = inpatients.with_columns(
         pl.lit("ward").alias("scope"), pl.col("ward_code").alias("unit")
     )
+    # Onset sub-scopes partition the inpatient first isolates, so a fresh admission and
+    # a long stay track their own data. The rates follow the data automatically: if
+    # community-onset cultures drift toward community resistance, ward-early drifts with
+    # them. Cultures without an admission date stay in ward only.
+    days = pl.col("days_since_admission")
+    early = inpatients.filter(
+        days.is_not_null() & (days < settings.hospital_onset_days)
+    ).with_columns(pl.lit(WARD_EARLY).alias("scope"), pl.col("ward_code").alias("unit"))
+    late = inpatients.filter(
+        days.is_not_null() & (days >= settings.hospital_onset_days)
+    ).with_columns(pl.lit(WARD_LATE).alias("scope"), pl.col("ward_code").alias("unit"))
     region = rows.filter(pl.col("ward_type") == "out").with_columns(
         pl.lit("region").alias("scope"), pl.col("home_area").alias("unit")
     )
-    return pl.concat([hospital, ward, region])
+    return pl.concat([hospital, ward, early, late, region])
 
 
 def _scopes(
@@ -144,6 +175,8 @@ def _scopes(
     return {
         "hospital": [{"unit": "-", "label": "Hospital"}],
         "ward": in_wards,
+        "ward-early": in_wards,
+        "ward-late": in_wards,
         "region": regions,
     }
 
@@ -172,7 +205,7 @@ def build_antibiogram(
             (pl.col("reported_for") == "all")
             | (pl.col("reported_for") == pl.col("specimen"))
         )
-        .pipe(_scoped_rows)
+        .pipe(_scoped_rows, settings)
     )
 
     grouping = [

@@ -201,8 +201,6 @@ class AntibioticCell(BaseModel):
     n: int
     n_s: int
     susceptibility_rate: float | None
-    ci_low: float | None
-    ci_high: float | None
     traffic_light: str
 
 

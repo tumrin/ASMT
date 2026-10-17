@@ -94,6 +94,7 @@ Acceptance criteria use the shared definitions at the end of this document (see 
 **Acceptance criteria**
 - Isolates are joined to cultures to get patient, sample date, specimen and ward.
 - For each (patient, organism, specimen type, period) only the isolate from the earliest sample date is counted.
+- For the ward and region scopes the rule is applied per setting (adding `ward_type`), so an inpatient isolate and an outpatient isolate from the same patient do not suppress each other; the hospital scope spans settings and keeps the single global first isolate.
 - Ties on the same date are resolved deterministically (e.g. lowest `culture_id` / `isolate_no`).
 - Unit tests cover deduplication with repeated samples from the same patient.
 
@@ -216,7 +217,7 @@ Acceptance criteria use the shared definitions at the end of this document (see 
 
 | Term | Definition |
 |---|---|
-| **Counted isolate** | First isolate per patient per species per specimen type per period (earliest sample date). |
+| **Counted isolate** | First isolate per patient per species per specimen type per period (earliest sample date); per setting (`ward_type`) for the ward and region scopes. |
 | **Resistance %** | Resistant (R) counted isolates ÷ tested counted isolates × 100. Data contains only S and R results. |
 | **Susceptibility %** | 100 − resistance %. Shown in the matrix where "how effective the antibiotic is" is needed. |
 | **Reportable** | At least 30 counted isolates for the organism/antibiotic/filter combination. |
