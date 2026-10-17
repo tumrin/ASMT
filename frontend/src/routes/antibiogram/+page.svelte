@@ -7,6 +7,7 @@
 	import { antibioticName } from '#lib/antibiotics.js';
 	import { ORGANISM_NAMES, organismName } from '#lib/organisms.js';
 	import { SPECIMEN_NAMES, specimenName } from '#lib/specimens.js';
+	import { trafficLightColor } from '#lib/trafficlight.js';
 	import { WARD_NAMES } from '#lib/wards.js';
 
 	// Empty string means no organism filter.
@@ -52,14 +53,7 @@
 
 	function cellFor(cells: AntibioticCell[], code: string): AntibioticCell | undefined {
 		return cells.find((cell) => cell.antibiotic_code === code);
-	}
-
-	const COLORS: Record<string, string> = {
-		green: '#c8e6c9',
-		yellow: '#fff59d',
-		red: '#ef9a9a'
-	};
-</script>
+	}</script>
 
 <svelte:head>
 	<title>Antibiogram</title>
@@ -131,7 +125,7 @@
 						<td>{specimenName(row.specimen)}</td>
 						{#each columns as code (code)}
 							{@const cell = cellFor(row.antibiotics, code)}
-							<td style:background={cell ? COLORS[cell.traffic_light] : undefined}>
+							<td style:background={cell ? trafficLightColor(cell.traffic_light) : undefined}>
 								{#if cell}
 									{cell.susceptibility_rate === null
 										? ''
