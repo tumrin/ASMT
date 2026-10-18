@@ -91,6 +91,13 @@
 	<title>Antibiogram</title>
 </svelte:head>
 
+<a class="back-button screen-only" href="/">
+	<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">
+		<path fill="currentColor" d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20z" />
+	</svg>
+	Back to frontpage
+</a>
+
 <div class="page-heading">
 	<h1>Antibiogram</h1>
 	<button type="button" onclick={printAntibiogram} disabled={loading || !data}>
@@ -190,6 +197,22 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 1rem;
+	}
+
+	.back-button {
+		display: inline-flex;
+		align-items: center;
+		gap: 0.5rem;
+		margin-top: 1rem;
+		padding: 0.5rem 0.75rem;
+		border-radius: 100px;
+		color: var(--color-primary);
+		font-weight: 500;
+		text-decoration: none;
+	}
+
+	.back-button:hover {
+		background: color-mix(in srgb, var(--color-primary) 8%, transparent);
 	}
 
 	.page-heading button {

@@ -14,9 +14,3 @@
 
 <Card>Age 52</Card>
 <Card elevated>recommendation table</Card>
-
-<style>
-	:global(body) {
-		background-color: #ccc;
-	}
-</style>
