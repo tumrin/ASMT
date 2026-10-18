@@ -56,6 +56,10 @@
 		text-decoration: none;
 	}
 
+	.brand:hover {
+		color: #3a4f6b;
+	}
+
 	nav {
 		display: flex;
 		align-self: stretch;
