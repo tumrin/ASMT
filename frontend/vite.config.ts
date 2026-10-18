@@ -4,10 +4,11 @@ import { defineConfig, loadEnv, type ProxyOptions } from 'vite';
 
 export default defineConfig(({ mode }) => {
 	// .env.[mode] is not loaded yet when this file runs, so load it explicitly.
+	// Fall back to the same default as src/env.ts so dev works without an env file.
 	const { API_URL } = loadEnv(mode, '.', '');
 	const proxy: Record<string, ProxyOptions> = {
 		'/api': {
-			target: API_URL,
+			target: API_URL ?? 'http://127.0.0.1:8000',
 			rewrite: (path) => path.replace(/^\/api/, '')
 		}
 	};
