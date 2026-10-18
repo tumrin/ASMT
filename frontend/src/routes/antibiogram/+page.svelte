@@ -1,14 +1,21 @@
 <script lang="ts">
-	import {
-		fetchAntibiogram,
-		type AntibioticCell,
-		type AntibiogramResponse
-	} from '#lib/antibiogram.js';
+	import { onMount } from 'svelte';
+	import { fetchAntibiogram, type AntibiogramResponse } from '#lib/antibiogram.js';
 	import { ANTIBIOTIC_NAMES, antibioticName, type AntibioticCode } from '#lib/antibiotics.js';
+	import RecommendationsCard from '#lib/components/RecommendationsCard.svelte';
+	import RecommendationsTable from '#lib/components/RecommendationsTable.svelte';
+	import { fetchMetadata, type Metadata } from '#lib/metadata.js';
 	import { ORGANISM_NAMES, organismName } from '#lib/organisms.js';
 	import { SPECIMEN_NAMES, specimenName } from '#lib/specimens.js';
-	import { trafficLightColor } from '#lib/trafficlight.js';
-	import { WARD_NAMES } from '#lib/wards.js';
+	import { wardName } from '#lib/wards.js';
+
+	// Annual periods in the available metadata, newest first (e.g. [2026, 2025, ...]).
+	function annualYears(periods: string[]): number[] {
+		return periods
+			.filter((period) => period.startsWith('annual:'))
+			.map((period) => Number(period.slice('annual:'.length)))
+			.sort((a, b) => b - a);
+	}
 
 	// Empty string means no organism filter.
 	let organism = $state('');
@@ -16,24 +23,47 @@
 	let specimen = $state('');
 	// "annual" or "last4w".
 	let periodKind = $state('annual');
-	// Sample years in data/cultures.csv (2023-10-02 to 2026-09-27).
-	const YEARS = [2026, 2025, 2024, 2023];
-	let year = $state(YEARS[0]);
-	// "-" means the whole hospital; a ward code switches to ward scope.
-	let unit = $state('-');
+	let year = $state(0);
+	// An empty ward or region means it is not selected. They are mutually exclusive:
+	// with neither selected the scope is the whole hospital.
+	let wardUnit = $state('');
+	let regionUnit = $state('');
 
+	let metadata = $state<Metadata | null>(null);
+	let metadataError = $state<string | null>(null);
+
+	// The available scopes and periods come from GET /metadata, never from a hardcoded list.
+	const years = $derived(annualYears(metadata?.periods ?? []));
+	const scope = $derived(wardUnit ? 'ward' : regionUnit ? 'region' : 'hospital');
+	const unit = $derived(wardUnit || regionUnit || '-');
 	const period = $derived(periodKind === 'last4w' ? 'last4w' : `annual:${year}`);
 
 	let data = $state<AntibiogramResponse | null>(null);
 	let error = $state<string | null>(null);
 	let loading = $state(false);
 
-	// Refetch whenever a filter changes; abort the previous request.
+	onMount(() => {
+		const controller = new AbortController();
+		fetchMetadata(controller.signal)
+			.then((response) => {
+				metadata = response;
+				year = annualYears(response.periods)[0] ?? 0;
+			})
+			.catch((err: unknown) => {
+				if (controller.signal.aborted) return;
+				metadataError = err instanceof Error ? err.message : String(err);
+			});
+		return () => controller.abort();
+	});
+
+	// Refetch whenever a filter changes; abort the previous request. The metadata must
+	// load first so the period and scope names are valid.
 	$effect(() => {
+		if (!metadata) return;
 		const controller = new AbortController();
 		loading = true;
 		error = null;
-		fetchAntibiogram({ unit, period, organism, specimen }, controller.signal)
+		fetchAntibiogram({ scope, unit, period, organism, specimen }, controller.signal)
 			.then((response) => {
 				data = response;
 				loading = false;
@@ -47,14 +77,10 @@
 		return () => controller.abort();
 	});
 
-	// Every known antibiotic is a column, whether or not the current rows report it.
-	const columns: AntibioticCode[] = Object.keys(ANTIBIOTIC_NAMES).sort((a, b) =>
+	// Every known antibiotic is a row, whether or not the current organisms report it.
+	const antibiotics: AntibioticCode[] = Object.keys(ANTIBIOTIC_NAMES).sort((a, b) =>
 		antibioticName(a).localeCompare(antibioticName(b), 'fi')
 	);
-
-	function cellFor(cells: AntibioticCell[], code: string): AntibioticCell | undefined {
-		return cells.find((cell) => cell.antibiotic_code === code);
-	}
 
 	function printAntibiogram() {
 		window.print();
@@ -95,10 +121,20 @@
 
 	<label class="screen-only">
 		Ward
-		<select bind:value={unit}>
-			<option value="-">All</option>
-			{#each Object.entries(WARD_NAMES) as [code, name] (code)}
-				<option value={code}>{name}</option>
+		<select bind:value={wardUnit} onchange={() => (regionUnit = '')}>
+			<option value="">All</option>
+			{#each metadata?.scopes.ward ?? [] as { unit } (unit)}
+				<option value={unit}>{wardName(unit)}</option>
+			{/each}
+		</select>
+	</label>
+
+	<label class="screen-only">
+		Region
+		<select bind:value={regionUnit} onchange={() => (wardUnit = '')}>
+			<option value="">All</option>
+			{#each metadata?.scopes.region ?? [] as { unit, label } (unit)}
+				<option value={unit}>{label}</option>
 			{/each}
 		</select>
 	</label>
@@ -115,7 +151,7 @@
 		<label>
 			Year
 			<select bind:value={year}>
-				{#each YEARS as y (y)}
+				{#each years as y (y)}
 					<option value={y}>{y}</option>
 				{/each}
 			</select>
@@ -123,7 +159,9 @@
 	{/if}
 </div>
 
-{#if loading}
+{#if metadataError}
+	<p>Error: {metadataError}</p>
+{:else if loading || !metadata}
 	<p>Loading…</p>
 {:else if error}
 	<p>Error: {error}</p>
@@ -131,41 +169,15 @@
 	<p class="print-only">
 		Filters: {organism ? organismName(organism) : 'All organisms'} ·
 		{specimen ? specimenName(specimen) : 'All specimens'} ·
-		{unit === '-' ? 'Hospital' : (WARD_NAMES[unit] ?? unit)} ·
+		{scope === 'hospital' ? 'Hospital' : scope === 'region' ? unit : wardName(unit)} ·
 		{data.period}
 	</p>
 	{#if data.organisms.length === 0}
 		<p>No results for these filters.</p>
 	{:else}
-		<table border="1">
-			<thead>
-				<tr>
-					<th>Organism</th>
-					<th>Specimen</th>
-					{#each columns as code (code)}
-						<th title={code}>{antibioticName(code)}</th>
-					{/each}
-				</tr>
-			</thead>
-			<tbody>
-				{#each data.organisms as row (`${row.organism}|${row.specimen}`)}
-					<tr>
-						<td>{organismName(row.organism)}</td>
-						<td>{specimenName(row.specimen)}</td>
-						{#each columns as code (code)}
-							{@const cell = cellFor(row.antibiotics, code)}
-							<td style:background={cell ? trafficLightColor(cell.traffic_light) : undefined}>
-								{#if cell}
-									{cell.susceptibility_rate === null
-										? ''
-										: `${Math.round(cell.susceptibility_rate * 100)}% `}(n={cell.n})
-								{/if}
-							</td>
-						{/each}
-					</tr>
-				{/each}
-			</tbody>
-		</table>
+		<RecommendationsCard>
+			<RecommendationsTable organisms={data.organisms} {antibiotics} />
+		</RecommendationsCard>
 	{/if}
 {/if}
 
@@ -230,23 +242,21 @@
 			display: block;
 		}
 
-		table {
-			width: 100%;
-			border-collapse: collapse;
+		:global(table) {
 			font-size: 7pt;
 			break-inside: auto;
 		}
 
-		thead {
+		:global(thead) {
 			display: table-header-group;
 		}
 
-		tr {
+		:global(tr) {
 			break-inside: avoid;
 		}
 
-		th,
-		td {
+		:global(th),
+		:global(td) {
 			padding: 2px;
 			print-color-adjust: exact;
 		}

@@ -1,4 +1,4 @@
-// Response shape of GET /antibiogram (server/packages/api/src/resistance_api/responses.py).
+// Response shape of GET /antibiogram (server/src/resistance/api/responses.py).
 
 import type { TrafficLight } from './trafficlight.js';
 
@@ -11,8 +11,6 @@ export interface AntibioticCell {
 	n: number;
 	n_s: number;
 	susceptibility_rate: number | null;
-	ci_low: number | null;
-	ci_high: number | null;
 	traffic_light: TrafficLight;
 }
 
@@ -31,6 +29,7 @@ export interface AntibiogramResponse {
 }
 
 export interface AntibiogramFilters {
+	scope: string;
 	unit: string;
 	period: string;
 	organism: string;
@@ -41,10 +40,7 @@ export async function fetchAntibiogram(
 	filters: AntibiogramFilters,
 	signal?: AbortSignal
 ): Promise<AntibiogramResponse> {
-	const params = new URLSearchParams({
-		scope: filters.unit === '-' ? 'hospital' : 'ward',
-		unit: filters.unit
-	});
+	const params = new URLSearchParams({ scope: filters.scope, unit: filters.unit });
 	if (filters.period) params.set('period', filters.period);
 	if (filters.organism) params.set('organism', filters.organism);
 	if (filters.specimen) params.set('specimen', filters.specimen);

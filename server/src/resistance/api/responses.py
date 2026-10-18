@@ -67,13 +67,9 @@ class PatientSummary(PatientInfo):
     wards: list[str]
 
 
-class PatientListEntry(PatientInfo):
-    wards: list[str]
-
-
 class PatientsResponse(BaseModel):
     n: int
-    patients: list[PatientListEntry]
+    patients: list[PatientSummary]
 
 
 class WardPatient(PatientInfo):
@@ -119,12 +115,15 @@ class WardCulture(BaseModel):
     isolates: list[WardCultureIsolate]
 
 
-class PatientWardDetail(BaseModel):
+class WardInfo(BaseModel):
     ward_code: str
     ward_fi: str | None
     ward_en: str | None
     ward_type: str | None
     institution: str | None
+
+
+class PatientWardDetail(WardInfo):
     cultures: list[WardCulture]
 
 
@@ -142,12 +141,7 @@ class WardCounts(BaseModel):
     isolates: int
 
 
-class WardSummary(BaseModel):
-    ward_code: str
-    ward_fi: str | None
-    ward_en: str | None
-    ward_type: str | None
-    institution: str | None
+class WardSummary(WardInfo):
     counts: WardCounts
     data_as_of: str | None = None
 
@@ -176,13 +170,16 @@ class HistoryResponse(BaseModel):
 # --- antibiotics -----------------------------------------------------------
 
 
-class AntibioticInfo(BaseModel):
+class AntibioticBase(BaseModel):
     antibiotic: str
     antibiotic_code: str
-    antibiotic_fi: str | None = None
     antibiotic_class: str = Field(alias="class")
     reported_for: str
     role: str
+
+
+class AntibioticInfo(AntibioticBase):
+    antibiotic_fi: str | None = None
 
 
 class AntibioticsResponse(BaseModel):
@@ -192,12 +189,7 @@ class AntibioticsResponse(BaseModel):
 # --- antibiogram -----------------------------------------------------------
 
 
-class AntibioticCell(BaseModel):
-    antibiotic: str
-    antibiotic_code: str
-    antibiotic_class: str = Field(alias="class")
-    reported_for: str
-    role: str
+class AntibioticCell(AntibioticBase):
     n: int
     n_s: int
     susceptibility_rate: float | None

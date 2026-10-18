@@ -4,10 +4,11 @@ from dataclasses import replace
 
 import polars as pl
 from fastapi.testclient import TestClient
-from resistance_analysis.config import Settings
-from resistance_analysis.load import load_dataset
-from resistance_analysis.pipeline import run
-from resistance_api.app import _fallback_chain, create_app
+
+from resistance.api.app import _fallback_chain, create_app
+from resistance.config import Settings
+from resistance.load import load_dataset
+from resistance.pipeline import run
 
 
 def _settings(dataset_dir, tmp_path) -> Settings:

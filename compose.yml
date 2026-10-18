@@ -1,0 +1,21 @@
+services:
+  server:
+    build: ./server
+    volumes:
+      - ./data:/data:ro
+    # Internal to the compose network: only the frontend talks to the API.
+    expose:
+      - "8000"
+
+  frontend:
+    build: ./frontend
+    environment:
+      API_URL: http://server:8000
+      # Set ORIGIN to the public URL once a reverse proxy fronts this container
+      # (needed for form actions and absolute URLs).
+      # ORIGIN: https://antibiogram.example.org
+    ports:
+      - "8082:3000"
+    depends_on:
+      server:
+        condition: service_healthy
