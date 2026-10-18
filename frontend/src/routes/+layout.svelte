@@ -12,7 +12,7 @@
 </svelte:head>
 
 <header class="app-header">
-	<a class="brand" href="/antibiogram">Cumulative antibiogram</a>
+	<a class="brand" href="/">Cumulative antibiogram</a>
 	<nav aria-label="Main navigation">
 		<a
 			href="/antibiogram"
