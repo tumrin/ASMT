@@ -1,13 +1,11 @@
 <script lang="ts">
-	import type { AntibioticCell } from '#lib/antibiogram.js';
+	import { hasReportableRate, type AntibioticCell } from '#lib/antibiogram.js';
 	import { trafficLightColor, trafficLightTextColor } from '#lib/trafficlight.js';
 
 	let { cell }: { cell?: AntibioticCell } = $props();
 
 	// Missing cell, no rate or not reportable -> unknown ("?").
-	const known = $derived(
-		cell !== undefined && cell.susceptibility_rate !== null && cell.traffic_light !== 'none'
-	);
+	const known = $derived(hasReportableRate(cell));
 </script>
 
 {#if known && cell}
@@ -26,7 +24,11 @@
 {/if}
 
 <style>
-	/* Fixed width so a long badge (e.g. n=2068) wraps under the rate instead of overlapping it. */
+	/*
+	 * Fixed width so a long badge (e.g. n=2068) wraps under the rate instead of
+	 * overlapping it. The auto margins keep the chip centred in a column that is
+	 * wider than the chip, under the centred column heading.
+	 */
 	.chip {
 		display: flex;
 		flex-wrap: wrap;
@@ -35,6 +37,7 @@
 		column-gap: 0.25rem;
 		box-sizing: border-box;
 		width: 6rem;
+		margin-inline: auto;
 		padding: 0.25rem 0.5rem;
 		border-radius: 4px;
 	}
@@ -43,13 +46,14 @@
 		border: 1px dashed var(--color-outline);
 	}
 
+	/* em so the rate scales with the table font size the print styles set. */
 	.rate {
 		flex: 1 0 auto;
-		font-size: 1.5rem;
+		font-size: 1.5em;
 		text-align: center;
 	}
 
 	.badge {
-		font-size: 0.75rem;
+		font-size: 0.75em;
 	}
 </style>

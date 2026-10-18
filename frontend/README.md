@@ -71,8 +71,9 @@ cp .env.example .env.production    # npm run preview
 `API_URL` never reaches browser code. `vite.config.ts` reads it (via `loadEnv`) for
 the dev and preview proxies; `src/env.ts` reads it from the process environment when
 the built server starts, for the production proxy in `src/hooks.server.ts` (it
-defaults to `http://127.0.0.1:8000` when unset, matching `vite.config.ts`). `.env.example` is committed; every
-other `.env*` file is gitignored. The built server does not load `.env` files, so
+defaults to `http://127.0.0.1:8000` when unset, matching `vite.config.ts`).
+`.env.example` is committed; every other `.env*` file is gitignored. The built server
+does not load `.env` files, so
 in production set `API_URL` in the server's environment (see `docker-compose.yml`).
 
 There are no tests, linter or formatter set up yet, so `npm run check` is the only
@@ -103,7 +104,7 @@ src/
     assets/favicon.svg
   routes/
     +layout.svelte    sets the favicon, renders children
-    +page.svelte      SvelteKit welcome placeholder
+    +page.svelte      root page metadata; +page.server.ts redirects to /antibiogram
 static/
   robots.txt
 ```
@@ -162,10 +163,7 @@ The Views section describes the finished product. Implemented so far: a basic
 antibiogram page at `/antibiogram` with organism, specimen, ward and region filters
 (the ward and region options come from `GET /metadata`; the two scopes are mutually
 exclusive) and period filters. Display names for organisms, specimens and wards are
-hardcoded in `src/lib/`. Not implemented yet:
 
-- Recommendations and patient views; `routes/+page.svelte` is still the SvelteKit
-  welcome placeholder.
 - API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
 - PDF export: the antibiogram uses the browser's print dialog, including the active
   filters; patient-view export is not implemented.
