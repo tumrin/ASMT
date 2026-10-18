@@ -26,4 +26,13 @@
 		padding: 0.5rem;
 		border-top: 1px solid var(--color-outline-variant);
 	}
+
+	/* Page-level print rules cannot outrank these scoped ones, so the tighter
+	   print padding has to be declared here. */
+	@media print {
+		th,
+		td {
+			padding: 2px;
+		}
+	}
 </style>

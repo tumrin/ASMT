@@ -71,8 +71,9 @@ cp .env.example .env.production    # npm run preview
 `API_URL` never reaches browser code. `vite.config.ts` reads it (via `loadEnv`) for
 the dev and preview proxies; `src/env.ts` reads it from the process environment when
 the built server starts, for the production proxy in `src/hooks.server.ts` (it
-defaults to `http://127.0.0.1:8000` when unset, matching `vite.config.ts`). `.env.example` is committed; every
-other `.env*` file is gitignored. The built server does not load `.env` files, so
+defaults to `http://127.0.0.1:8000` when unset, matching `vite.config.ts`).
+`.env.example` is committed; every other `.env*` file is gitignored. The built server
+does not load `.env` files, so
 in production set `API_URL` in the server's environment (see `docker-compose.yml`).
 
 There are no tests, linter or formatter set up yet, so `npm run check` is the only

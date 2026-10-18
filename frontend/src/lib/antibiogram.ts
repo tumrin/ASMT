@@ -14,6 +14,12 @@ export interface AntibioticCell {
 	traffic_light: TrafficLight;
 }
 
+// A cell is reportable only when it has a rate and a traffic light: a missing cell, a
+// rate below the reporting floor or a non-reportable cell all count as "no result".
+export function hasReportableRate(cell: AntibioticCell | undefined): boolean {
+	return cell !== undefined && cell.susceptibility_rate !== null && cell.traffic_light !== 'none';
+}
+
 export interface AntibiogramRow {
 	organism: string;
 	specimen: string;
