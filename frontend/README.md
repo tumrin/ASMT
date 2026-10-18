@@ -1,9 +1,9 @@
 # frontend
 
-Web client for the cumulative antibiogram application. It renders the antibiogram,
-the empiric recommendations and, as a nice to have, the patient view from the backend
-API. The frontend does no rate calculations; every value it shows comes from the
-backend (spec.md §4).
+Web client for the cumulative antibiogram application. A main menu links to the
+antibiogram and, as a nice to have, the patient view with its empiric
+recommendations. The frontend does no rate calculations; every value it shows comes
+from the backend (spec.md §4).
 
 ## Technology stack
 
@@ -41,8 +41,8 @@ the icons used and does not fetch icon data at runtime:
 
 ```svelte
 <script lang="ts">
-  import Icon from '@iconify/svelte';
-  import home from '@iconify-icons/mdi/home';
+	import Icon from '@iconify/svelte';
+	import home from '@iconify-icons/mdi/home';
 </script>
 
 <Icon icon={home} />
@@ -76,8 +76,8 @@ defaults to `http://127.0.0.1:8000` when unset, matching `vite.config.ts`).
 does not load `.env` files, so
 in production set `API_URL` in the server's environment (see `docker-compose.yml`).
 
-There are no tests, linter or formatter set up yet, so `npm run check` is the only
-check to run before you push.
+There are no tests set up yet, so `npm run check` and `npm run lint` are the
+checks to run before you push.
 
 ## Deployment
 
@@ -100,16 +100,30 @@ src/
   env.ts              `API_URL` definition (`defineEnvVars`)
   hooks.server.ts     production `/api/*` proxy to `API_URL`
   lib/
-    index.ts          `#lib` alias entry (empty)
+    api.ts            shared `fetchJson` for `/api/*`
+    antibiogram.ts    `GET /antibiogram` types + fetch
+    antibiotics.ts    antibiotic code -> display name (`antibiotics.csv`)
+    metadata.ts       `GET /metadata` types + fetch
+    mockPatients.ts   mock patient documents for the patient view
+    organisms.ts      organism id -> display name
+    recommendations.ts `GET /recommendations` types + fetch
+    specimens.ts      specimen -> display name (`cultures.csv`)
+    trafficlight.ts   traffic light -> cell colours
+    wards.ts          ward code -> display name (`wards.csv`)
+    components/       RecommendationsCard, RecommendationsTable, AntibioticRow,
+                      SusceptibilityCell
     assets/favicon.svg
   routes/
-    +layout.svelte    sets the favicon, renders children
-    +page.svelte      root page metadata; +page.server.ts redirects to /antibiogram
+    +layout.svelte    header, nav, renders children
+    +page.svelte      the main menu
+    antibiogram/      the antibiogram view
+    patients/         the patient view
 static/
   robots.txt
+  dropdown.svg, qrscan.svg, table.svg   main-menu icons
 ```
 
-`#lib` and `#lib/*` are Node subpath imports declared in `package.json`.
+`#lib/*` is a Node subpath import declared in `package.json`.
 
 ## Views
 
@@ -159,11 +173,19 @@ Doctors and nurses (spec.md §2). There is no authentication or pagination
 
 ## Implementation status
 
-The Views section describes the finished product. Implemented so far: a basic
-antibiogram page at `/antibiogram` with organism, specimen, ward and region filters
-(the ward and region options come from `GET /metadata`; the two scopes are mutually
-exclusive) and period filters. Display names for organisms, specimens and wards are
+The Views section describes the finished product. Implemented so far:
 
-- API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
-- PDF export: the antibiogram uses the browser's print dialog, including the active
-  filters; patient-view export is not implemented.
+- Main menu at `/`, linking to the patient view and the antibiogram.
+- Antibiogram page at `/antibiogram` with organism, specimen, ward and region
+  filters (the ward and region options come from `GET /metadata`; the two scopes
+  are mutually exclusive), period filters and a hide-empty-columns toggle.
+  Display names for organisms, specimens, wards and antibiotics come from the
+  maps in `src/lib/`.
+- Patient view at `/patients` (nice to have) with search, patient info, per-ward
+  cultures, history and empiric recommendations. It renders the mock patients in
+  `src/lib/mockPatients.ts` instead of the `GET /patients*` endpoints; the
+  recommendations and the available periods come from the API.
+- API client: `src/lib/api.ts` (`fetchJson`) plus the `antibiogram`, `metadata`
+  and `recommendations` modules.
+- PDF export: the antibiogram uses the browser's print dialog, including the
+  active filters; patient-view export is not implemented.

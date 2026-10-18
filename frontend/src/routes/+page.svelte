@@ -1,6 +1,3 @@
-<script lang="ts">
-</script>
-
 <main>
 	<h1>ASMT</h1>
 	<p class="subheading">Antimicrobial Susceptibility Monitoring Tool</p>
@@ -10,7 +7,7 @@
 			<img src="/qrscan.svg" alt="" />
 
 			<h2>Scan patient tag</h2>
-			<p>Patent-specific recommendations</p>
+			<p>Patient-specific recommendations</p>
 		</a>
 
 		<a href="/patients">
@@ -51,7 +48,7 @@
 	h1 {
 		font-size: 57px;
 		font-weight: normal;
-		color: #6750a4;
+		color: var(--color-primary);
 	}
 
 	.subheading {
@@ -84,9 +81,5 @@
 		img {
 			margin-bottom: 16px;
 		}
-	}
-
-	:global(body) {
-		background-color: #fef7ff;
 	}
 </style>
