@@ -158,9 +158,10 @@ Doctors and nurses (spec.md §2). There is no authentication or pagination
 ## Implementation status
 
 The Views section describes the finished product. Implemented so far: a basic
-antibiogram page at `/antibiogram` with organism, specimen, ward and period filters.
-Display names for organisms, specimens and wards are hardcoded in `src/lib/`. Not
-implemented yet:
+antibiogram page at `/antibiogram` with organism, specimen, ward and region filters
+(the ward and region options come from `GET /metadata`; the two scopes are mutually
+exclusive) and period filters. Display names for organisms, specimens and wards are
+hardcoded in `src/lib/`. Not implemented yet:
 
 - Recommendations and patient views; `routes/+page.svelte` is still the SvelteKit
   welcome placeholder.

@@ -29,6 +29,7 @@ export interface AntibiogramResponse {
 }
 
 export interface AntibiogramFilters {
+	scope: string;
 	unit: string;
 	period: string;
 	organism: string;
@@ -39,10 +40,7 @@ export async function fetchAntibiogram(
 	filters: AntibiogramFilters,
 	signal?: AbortSignal
 ): Promise<AntibiogramResponse> {
-	const params = new URLSearchParams({
-		scope: filters.unit === '-' ? 'hospital' : 'ward',
-		unit: filters.unit
-	});
+	const params = new URLSearchParams({ scope: filters.scope, unit: filters.unit });
 	if (filters.period) params.set('period', filters.period);
 	if (filters.organism) params.set('organism', filters.organism);
 	if (filters.specimen) params.set('specimen', filters.specimen);
