@@ -28,6 +28,8 @@
 	// with neither selected the scope is the whole hospital.
 	let wardUnit = $state('');
 	let regionUnit = $state('');
+	// Drop organism/specimen columns that have no reportable result.
+	let hideEmpty = $state(false);
 
 	let metadata = $state<Metadata | null>(null);
 	let metadataError = $state<string | null>(null);
@@ -93,9 +95,19 @@
 
 <div class="page-heading">
 	<h1>Antibiogram</h1>
-	<button type="button" onclick={printAntibiogram} disabled={loading || !data}>
-		Print / Save PDF
-	</button>
+	<div class="actions">
+		<button
+			type="button"
+			onclick={() => (hideEmpty = !hideEmpty)}
+			aria-pressed={hideEmpty}
+			disabled={loading || !data}
+		>
+			Hide empty
+		</button>
+		<button type="button" onclick={printAntibiogram} disabled={loading || !data}>
+			Print / Save PDF
+		</button>
+	</div>
 </div>
 
 <div class="filters">
@@ -176,7 +188,7 @@
 		<p>No results for these filters.</p>
 	{:else}
 		<RecommendationsCard>
-			<RecommendationsTable organisms={data.organisms} {antibiotics} />
+			<RecommendationsTable organisms={data.organisms} {antibiotics} {hideEmpty} />
 		</RecommendationsCard>
 	{/if}
 {/if}
@@ -192,6 +204,11 @@
 		gap: 1rem;
 	}
 
+	.actions {
+		display: flex;
+		gap: 0.5rem;
+	}
+
 	.page-heading button {
 		padding: 0.5rem 0.75rem;
 		border: 1px solid #52657f;
@@ -201,6 +218,11 @@
 		font: inherit;
 		font-weight: 600;
 		cursor: pointer;
+	}
+
+	.page-heading button[aria-pressed='true'] {
+		background: #52657f;
+		color: #fff;
 	}
 
 	.page-heading button:disabled {
@@ -257,7 +279,6 @@
 
 		:global(th),
 		:global(td) {
-			padding: 2px;
 			print-color-adjust: exact;
 		}
 	}
