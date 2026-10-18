@@ -8,7 +8,7 @@ backend (spec.md §4).
 ## Technology stack
 
 - Svelte 5 (runes mode forced for project files in `vite.config.ts`)
-- SvelteKit 3 with `@sveltejs/adapter-auto`
+- SvelteKit 3 with `@sveltejs/adapter-node`
 - Vite 8
 - TypeScript 6 (`strict`)
 - Tooling
@@ -60,23 +60,34 @@ file for the mode you run:
 
 ```sh
 cp .env.example .env.development   # npm run dev
-cp .env.example .env.production    # npm run build / npm run preview
+cp .env.example .env.production    # npm run preview
 ```
 
 | Variable  | Required | Example                 | Description                                   |
 | --------- | -------- | ----------------------- | --------------------------------------------- |
 | `API_URL` | yes      | `http://127.0.0.1:8000` | Backend base URL that `/api/*` is proxied to. |
 
-`API_URL` is only read by `vite.config.ts` (via `loadEnv`), so it never reaches
-browser code. `.env.example` is committed; every other `.env*` file is gitignored.
-The proxy exists only in the Vite dev and preview servers; a production deployment
-must route `/api` to the backend itself.
+`API_URL` never reaches browser code. `vite.config.ts` reads it (via `loadEnv`) for
+the dev and preview proxies; `src/env.ts` reads it from the process environment when
+the built server starts, for the production proxy in `src/hooks.server.ts` (it
+defaults to `http://127.0.0.1:8000` when unset). `.env.example` is committed; every
+other `.env*` file is gitignored. The built server does not load `.env` files, so
+in production set `API_URL` in the server's environment (see `docker-compose.yml`).
 
 There are no tests, linter or formatter set up yet, so `npm run check` is the only
 check to run before you push.
 
-`adapter-auto` only supports some environments; pick a specific adapter once the
-deployment target is known (https://svelte.dev/docs/kit/adapters).
+## Deployment
+
+`npm run build` produces a standalone Node server with
+[`@sveltejs/adapter-node`](https://svelte.dev/docs/kit/adapter-node); run it with
+`node build`. It serves on `HOST:PORT` (defaults `0.0.0.0:3000`), reads `API_URL`
+from the process environment as described above, and `src/hooks.server.ts` forwards
+`/api/*` to it with the prefix stripped. `Dockerfile` builds this, and
+`docker-compose.yml` at the repository root runs the whole stack: the API is
+internal to the compose network, the frontend is published on host port 8080. Set
+`ORIGIN` when a reverse proxy fronts the frontend (needed for form actions and
+absolute URLs).
 
 ## Layout
 
@@ -84,6 +95,8 @@ deployment target is known (https://svelte.dev/docs/kit/adapters).
 src/
   app.html            HTML shell
   app.d.ts            App namespace types (all empty)
+  env.ts              `API_URL` definition (`defineEnvVars`)
+  hooks.server.ts     production `/api/*` proxy to `API_URL`
   lib/
     index.ts          `#lib` alias entry (empty)
     assets/favicon.svg
@@ -154,4 +167,3 @@ implemented yet:
 - API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
 - PDF export: the antibiogram uses the browser's print dialog, including the active
   filters; patient-view export is not implemented.
-- Deployment adapter: `adapter-auto` is still in place.
