@@ -9,245 +9,34 @@
 	import locationIcon from '@iconify-icons/mdi/map-marker';
 	import searchIcon from '@iconify-icons/mdi/magnify';
 	import tuneIcon from '@iconify-icons/mdi/tune';
+	import { antibioticName } from '#lib/antibiotics.js';
+	import {
+		findMockPatient,
+		mockHistory,
+		MOCK_PATIENTS,
+		type HistoryEntry,
+		type PatientSummary,
+		type WardDetail
+	} from '#lib/mockPatients.js';
+	import { fetchMetadata } from '#lib/metadata.js';
 	import { organismName } from '#lib/organisms.js';
+	import {
+		fetchRecommendations,
+		type RecommendationExcluded,
+		type RecommendationOption
+	} from '#lib/recommendations.js';
+	import { specimenName } from '#lib/specimens.js';
 
-	type PatientListItem = {
-		patient_id: string;
-		sex: string;
-		birth_year: number;
-		home_area: string;
-		wards: string[];
-	};
-
-	type PatientSummary = {
-		patient_id: string;
-		sex: string;
-		birth_year: number;
-		home_area: string;
-		wards: string[];
-	};
-
-	type WardIsolate = {
-		isolate_id: string;
-		isolate_no: number;
-		organism: string;
-		quantity: string | null;
-		flags: {
-			esbl: number;
-			mrsa: number;
-			vre: number;
-			cpe: number;
-		};
-		susceptibility: Record<string, string>;
-	};
-
-	type WardCulture = {
-		culture_id: string;
-		sample_date: string;
-		iso_year: number;
-		iso_week: number;
-		age_years: number;
-		specimen: string;
-		result: string;
-		n_isolates: number;
-		days_since_admission: number | null;
-		isolates: WardIsolate[];
-	};
-
-	type WardDetail = {
-		ward_code: string;
-		ward_fi: string | null;
-		ward_en: string | null;
-		ward_type: string | null;
-		institution: string | null;
-		cultures: WardCulture[];
-	};
-
-	type HistoryEntry = {
-		isolate_id: string;
-		culture_id: string;
-		organism: string;
-		specimen: string;
-		ward_code: string | null;
-		sample_date: string | null;
-		days_ago: number | null;
-		flags: {
-			esbl: number;
-			mrsa: number;
-			vre: number;
-			cpe: number;
-		};
-		susceptibility: Record<string, string>;
-	};
-
-	type RecommendationOption = {
-		antibiotic: string;
-		antibiotic_code: string;
-		class: string;
-		reported_for: string;
-		role: string;
-		n: number;
-		n_s: number;
-		susceptibility_rate: number | null;
-		ci_low: number | null;
-		ci_high: number | null;
-		traffic_light: string;
-		source_scope: string;
-		source_unit: string;
-		source_period: string;
-	};
-
-	type RecommendationResponse = {
-		scope: string;
-		unit: string;
-		organism: string;
-		specimen: string;
-		data_as_of: string | null;
-		options: RecommendationOption[];
-		excluded: Array<{
-			antibiotic: string;
-			antibiotic_code: string;
-			reason: string;
-			detail: string;
-		}>;
-		limitations: string[];
-	};
-
+	// One recommendations table per distinct organism × specimen finding.
 	type RecommendationGroup = {
 		organism: string;
 		specimen: string;
 		options: RecommendationOption[];
-		excluded: RecommendationResponse['excluded'];
+		excluded: RecommendationExcluded[];
 		dataAsOf: string | null;
 	};
 
-	type MockPatient = {
-		summary: PatientSummary;
-		ward: WardDetail;
-	};
-
-	const API_BASE = '/api';
-
-	function mockCulture(
-		cultureId: string,
-		sampleDate: string,
-		specimen: string,
-		organism: string,
-		susceptibility: Record<string, string>,
-		flags = { esbl: 0, mrsa: 0, vre: 0, cpe: 0 }
-	): WardCulture {
-		const date = new Date(`${sampleDate}T00:00:00`);
-		return {
-			culture_id: cultureId,
-			sample_date: sampleDate,
-			iso_year: date.getFullYear(),
-			iso_week: 1,
-			age_years: 45,
-			specimen,
-			result: 'Positive',
-			n_isolates: 1,
-			days_since_admission: 2,
-			isolates: [
-				{
-					isolate_id: `MOCK-${cultureId}`,
-					isolate_no: 1,
-					organism,
-					quantity: 'moderate',
-					flags,
-					susceptibility
-				}
-			]
-		};
-	}
-
-	function mockPatient(
-		patient_id: string,
-		sex: string,
-		birth_year: number,
-		home_area: string,
-		ward_code: string,
-		ward_en: string,
-		cultures: WardCulture[]
-	): MockPatient {
-		return {
-			summary: { patient_id, sex, birth_year, home_area, wards: [ward_code] },
-			ward: {
-				ward_code,
-				ward_fi: ward_en,
-				ward_en,
-				ward_type: 'in',
-				institution: 'Demo Hospital',
-				cultures
-			}
-		};
-	}
-
-	const MOCK_PATIENTS: MockPatient[] = [
-		mockPatient('MOCK-001', 'F', 1984, 'North', 'MED-A', 'Internal medicine A', [
-			mockCulture('CULTURE-001', '2026-09-24', 'urine', 'escherichia_coli', {
-				AMP: 'R',
-				CIP: 'S',
-				MEC: 'S',
-				NIT: 'S',
-				TMP: 'R'
-			}),
-			mockCulture('CULTURE-002', '2026-08-19', 'urine', 'escherichia_coli', {
-				AMP: 'R',
-				CIP: 'S',
-				MEC: 'S',
-				NIT: 'S',
-				TMP: 'S'
-			})
-		]),
-		mockPatient('MOCK-002', 'M', 1971, 'West', 'SURG', 'Surgery', [
-			mockCulture(
-				'CULTURE-003',
-				'2026-09-21',
-				'wound',
-				'staphylococcus_aureus',
-				{
-					CIP: 'S',
-					CLI: 'R',
-					FOX: 'S',
-					VAN: 'S'
-				},
-				{ esbl: 0, mrsa: 0, vre: 0, cpe: 0 }
-			)
-		]),
-		mockPatient('MOCK-003', 'F', 1996, 'Centre', 'URO', 'Urology', [
-			mockCulture('CULTURE-004', '2026-09-18', 'urine', 'enterococcus_faecalis', {
-				AMP: 'S',
-				CIP: 'R',
-				NIT: 'S',
-				VAN: 'S'
-			})
-		]),
-		mockPatient('MOCK-004', 'M', 1955, 'East', 'ICU', 'Intensive care unit', [
-			mockCulture(
-				'CULTURE-005',
-				'2026-09-25',
-				'blood',
-				'klebsiella_pneumoniae',
-				{
-					CRO: 'R',
-					MEM: 'S',
-					TZP: 'R'
-				},
-				{ esbl: 1, mrsa: 0, vre: 0, cpe: 0 }
-			)
-		]),
-		mockPatient('MOCK-005', 'F', 1947, 'South', 'GER', 'Geriatrics', [
-			mockCulture('CULTURE-006', '2026-09-12', 'urine', 'proteus_mirabilis', {
-				AMP: 'S',
-				CIP: 'S',
-				MEC: 'S',
-				NIT: 'R',
-				TMP: 'S'
-			})
-		])
-	];
-
-	let patientList = $state<PatientListItem[]>([]);
+	let patientList = $state<PatientSummary[]>([]);
 	let patientSummary = $state<PatientSummary | null>(null);
 	let selectedPatientId = $state<string>('');
 	let selectedWard = $state<string>('');
@@ -299,22 +88,7 @@
 		return kind === 'annual' ? `Annual ${year}` : period;
 	};
 
-	const antibioticNamesByCode: Record<string, string> = {
-		AMP: 'Ampicillin',
-		CAZ: 'Ceftazidime',
-		CIP: 'Ciprofloxacin',
-		CLI: 'Clindamycin',
-		CRO: 'Ceftriaxone',
-		CXM: 'Cefuroxime',
-		FOX: 'Cefoxitin',
-		MEC: 'Mecillinam',
-		MEM: 'Meropenem',
-		NIT: 'Nitrofurantoin',
-		TMP: 'Trimethoprim',
-		TZP: 'Piperacillin-tazobactam',
-		VAN: 'Vancomycin'
-	};
-
+	// Exclusion reasons arrive as snake_case ids (e.g. not_reported_for_specimen).
 	function displayWords(value: string): string {
 		return value
 			.replaceAll('_', ' ')
@@ -334,7 +108,7 @@
 			}
 		}
 		return [...resistantCases.entries()].map(([antibiotic, cases]) => ({
-			antibiotic: antibioticNamesByCode[antibiotic] ?? displayWords(antibiotic),
+			antibiotic: antibioticName(antibiotic),
 			count: cases.size
 		}));
 	});
@@ -348,14 +122,6 @@
 		return list;
 	}
 
-	async function fetchJson<T>(url: string): Promise<T> {
-		const response = await fetch(url);
-		if (!response.ok) {
-			throw new Error(`Request failed (${response.status}) for ${url}`);
-		}
-		return (await response.json()) as T;
-	}
-
 	async function loadPatientList() {
 		loading = true;
 		try {
@@ -364,7 +130,7 @@
 			statusTone = 'info';
 
 			try {
-				const metadata = await fetchJson<{ periods: string[] }>(`${API_BASE}/metadata`);
+				const metadata = await fetchMetadata();
 				availablePeriods = metadata.periods?.length ? metadata.periods : ['last4w'];
 			} catch (error) {
 				console.error(error);
@@ -379,37 +145,26 @@
 		}
 	}
 
-	function mockHistory(ward: WardDetail): HistoryEntry[] {
-		return ward.cultures.flatMap((culture) =>
-			culture.isolates.map((isolate) => ({
-				isolate_id: isolate.isolate_id,
-				culture_id: culture.culture_id,
-				organism: isolate.organism,
-				specimen: culture.specimen,
-				ward_code: ward.ward_code,
-				sample_date: culture.sample_date,
-				days_ago: null,
-				flags: isolate.flags,
-				susceptibility: isolate.susceptibility
-			}))
-		);
-	}
-
 	async function loadRecommendationsForFinding(
 		wardCode: string,
 		organism: string,
 		specimen: string,
 		period: string
-	) {
-		const url = `${API_BASE}/recommendations?scope=ward&unit=${encodeURIComponent(wardCode)}&organism=${encodeURIComponent(organism)}&specimen=${encodeURIComponent(specimen)}&period=${encodeURIComponent(period)}`;
-		const payload = await fetchJson<RecommendationResponse>(url);
+	): Promise<RecommendationGroup> {
+		const payload = await fetchRecommendations({
+			scope: 'ward',
+			unit: wardCode,
+			organism,
+			specimen,
+			period
+		});
 		return {
 			organism,
 			specimen,
 			options: payload.options ?? [],
 			excluded: payload.excluded ?? [],
 			dataAsOf: payload.data_as_of
-		} satisfies RecommendationGroup;
+		};
 	}
 
 	async function refreshRecommendations() {
@@ -458,7 +213,7 @@
 		recommendationGroups = [];
 		loading = true;
 		try {
-			const mock = MOCK_PATIENTS.find((item) => item.summary.patient_id === patientId);
+			const mock = findMockPatient(patientId);
 			if (!mock) throw new Error(`Unknown mock patient ${patientId}`);
 			const summary = mock.summary;
 			if (requestVersion !== selectionVersion) return;
@@ -489,7 +244,7 @@
 		wardDocument = null;
 		loading = true;
 		try {
-			const mock = MOCK_PATIENTS.find((item) => item.summary.patient_id === patientId);
+			const mock = findMockPatient(patientId);
 			const ward = mock?.ward.ward_code === wardCode ? mock.ward : null;
 			if (!ward) throw new Error(`Unknown mock ward ${wardCode} for ${patientId}`);
 			if (selectedPatientId !== patientId || selectedWard !== wardCode) return;
@@ -533,8 +288,8 @@
 		<p class="status-banner error" role="alert">{status}</p>
 	{/if}
 
-	<div class="layout" class:selection-open={isSelecting}>
-		<aside class="panel patient-list-panel" hidden={!isSelecting}>
+	<div>
+		<aside class="patient-list-panel" hidden={!isSelecting}>
 			<div class="panel-header">
 				<label class="search-field">
 					<Icon icon={searchIcon} aria-hidden="true" />
@@ -574,14 +329,14 @@
 			{/if}
 		</aside>
 
-		<main class="panel patient-detail-panel" hidden={isSelecting}>
+		<main class="patient-detail-panel" hidden={isSelecting}>
 			{#if patientSummary}
 				<section class="section-block scope-section">
 					<div class="section-header">
 						<h2><Icon icon={tuneIcon} aria-hidden="true" />Scope</h2>
 					</div>
 					<div class="scope-grid">
-						<div class="scope-card location-card">
+						<div class="scope-card">
 							<div class="scope-label">
 								<Icon icon={locationIcon} aria-hidden="true" />
 								Location
@@ -596,7 +351,7 @@
 								{/each}
 							</select>
 						</div>
-						<div class="scope-card period-card">
+						<div class="scope-card">
 							<div class="scope-label">
 								<Icon icon={calendarIcon} aria-hidden="true" />
 								Timeframe
@@ -806,7 +561,7 @@
 					{:else}
 						{#each recommendationGroups as group}
 							<div class="recommendation-group">
-								<h3>{organismName(group.organism)} · {displayWords(group.specimen)}</h3>
+								<h3>{organismName(group.organism)} · {specimenName(group.specimen)}</h3>
 								<div class="table-wrap">
 									<table>
 										<thead>
@@ -819,7 +574,7 @@
 											{#each group.options as option}
 												<tr>
 													<td class="antibiotic-name">
-														{displayWords(option.antibiotic)} ({option.antibiotic_code})
+														{antibioticName(option.antibiotic_code)} ({option.antibiotic_code})
 													</td>
 													<td>
 														<div class="rate-cell traffic-{option.traffic_light}">
@@ -845,7 +600,9 @@
 										<ul>
 											{#each group.excluded as item (`${item.antibiotic_code}-${item.reason}`)}
 												<li>
-													<span>{displayWords(item.antibiotic)} ({item.antibiotic_code})</span>
+													<span
+														>{antibioticName(item.antibiotic_code)} ({item.antibiotic_code})</span
+													>
 													<small>{displayWords(item.reason)}: {item.detail}</small>
 												</li>
 											{/each}
@@ -867,316 +624,28 @@
 </div>
 
 <style>
-	:global(body) {
-		margin: 0;
-		font-family: Inter, 'Segoe UI', sans-serif;
-		background: #f4f7fb;
-		color: #122033;
-	}
-
 	* {
 		box-sizing: border-box;
 	}
 
 	.page-shell {
-		max-width: 1400px;
+		max-width: 760px;
 		margin: 0 auto;
-		padding: 2rem 1.5rem 3rem;
+		padding: 0.45rem 0 2rem;
 	}
 
 	.topbar {
 		display: flex;
-		justify-content: space-between;
+		justify-content: flex-start;
 		align-items: center;
 		gap: 1rem;
-		margin-bottom: 1rem;
+		min-height: 1.5rem;
+		margin: 0 0 0.55rem;
 	}
 
 	.topbar h1 {
 		margin: 0;
 		font-size: 1.05rem;
-	}
-
-	.nav-link {
-		text-decoration: none;
-		color: #123b7a;
-		background: #eaf1ff;
-		border-radius: 999px;
-		padding: 0.7rem 1rem;
-		font-weight: 600;
-	}
-
-	.status-banner {
-		margin-bottom: 1.25rem;
-		padding: 0.8rem 1rem;
-		border-radius: 10px;
-		border: 1px solid #dfe7f3;
-		font-weight: 600;
-	}
-
-	.status-banner.info {
-		background: #edf7ff;
-		color: #164a87;
-	}
-
-	.status-banner.error {
-		background: #fff3f3;
-		color: #8b2e2e;
-	}
-
-	.layout {
-		display: grid;
-		grid-template-columns: minmax(260px, 340px) minmax(0, 1fr);
-		gap: 1.25rem;
-		align-items: start;
-	}
-
-	.panel {
-		background: #ffffff;
-		border: 1px solid #dfe7f3;
-		border-radius: 16px;
-		box-shadow: 0 8px 22px rgba(16, 45, 73, 0.05);
-	}
-
-	.patient-list-panel {
-		padding: 1rem;
-	}
-
-	.panel-header {
-		display: flex;
-		flex-direction: column;
-		gap: 0.65rem;
-		margin-bottom: 0.9rem;
-	}
-
-	.section-header h2,
-	.recommendation-group h3 {
-		margin: 0;
-	}
-
-	.search-field input,
-	.scope-card select {
-		width: 100%;
-		padding: 0.7rem 0.8rem;
-		border-radius: 10px;
-		border: 1px solid #d8e2f0;
-		font: inherit;
-		background: white;
-	}
-
-	.patient-list {
-		list-style: none;
-		padding: 0;
-		margin: 0;
-		display: grid;
-		gap: 0.75rem;
-	}
-
-	.patient-list button {
-		width: 100%;
-		text-align: left;
-		padding: 0.9rem 0.9rem;
-		border-radius: 12px;
-		border: 1px solid #dfe7f3;
-		background: #f8fbff;
-		cursor: pointer;
-		transition: all 0.15s ease;
-	}
-
-	.patient-list button:hover,
-	.patient-list button.active {
-		background: #edf4ff;
-		border-color: #7ca7ff;
-	}
-
-	.patient-id {
-		font-size: 1.02rem;
-		font-weight: 700;
-	}
-
-	.patient-meta {
-		margin-top: 0.2rem;
-		color: #52657f;
-		font-size: 0.9rem;
-	}
-
-	.patient-detail-panel {
-		padding: 1.2rem;
-	}
-
-	.summary-grid {
-		display: grid;
-		grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-		gap: 0.9rem;
-		margin-bottom: 1.2rem;
-	}
-
-	.summary-card {
-		padding: 0.9rem 1rem;
-		border-radius: 12px;
-		background: #f9fbff;
-		border: 1px solid #dfe7f3;
-	}
-
-	.label {
-		display: block;
-		text-transform: uppercase;
-		letter-spacing: 0.06em;
-		font-size: 0.72rem;
-		color: #607087;
-		margin-bottom: 0.3rem;
-	}
-
-	.ward-picker {
-		display: flex;
-		align-items: center;
-		gap: 0.7rem;
-		margin-bottom: 1rem;
-		flex-wrap: wrap;
-	}
-
-	.section-block {
-		margin-top: 1.4rem;
-	}
-
-	.section-header {
-		display: flex;
-		align-items: end;
-		justify-content: space-between;
-		gap: 1rem;
-		margin-bottom: 0.75rem;
-	}
-
-	.section-header p {
-		margin: 0;
-		color: #5a6d86;
-		font-size: 0.92rem;
-	}
-
-	.table-wrap {
-		overflow-x: auto;
-	}
-
-	table {
-		width: 100%;
-		border-collapse: collapse;
-		min-width: 760px;
-	}
-
-	th,
-	td {
-		padding: 0.75rem 0.7rem;
-		text-align: left;
-		border-bottom: 1px solid #e5ebf4;
-		vertical-align: top;
-	}
-
-	th {
-		text-transform: uppercase;
-		font-size: 0.76rem;
-		letter-spacing: 0.04em;
-		color: #4f647d;
-		background: #f7faff;
-	}
-
-	.isolate-line,
-	.iso-details {
-		display: flex;
-		flex-wrap: wrap;
-		gap: 0.3rem 0.45rem;
-		align-items: center;
-		margin-bottom: 0.4rem;
-	}
-
-	.flag,
-	.susceptibility-pill,
-	.traffic-pill {
-		display: inline-flex;
-		align-items: center;
-		padding: 0.22rem 0.53rem;
-		border-radius: 999px;
-		font-size: 0.74rem;
-		font-weight: 600;
-	}
-
-	.flag {
-		background: #edf3ff;
-		color: #1f4d99;
-	}
-
-	.susceptibility-pill {
-		margin: 0 0.3rem 0.35rem 0;
-		background: #edf3f8;
-		color: #213d5f;
-	}
-
-	.susceptibility-pill.s {
-		background: #eafaf2;
-		color: #166a42;
-	}
-
-	.susceptibility-pill.r {
-		background: #fff1f1;
-		color: #9a2f2f;
-	}
-
-	.traffic-pill {
-		color: white;
-		padding-inline: 0.7rem;
-		text-transform: capitalize;
-	}
-
-	.recommendation-group {
-		margin-top: 0.8rem;
-		padding: 1rem;
-		border: 1px solid #dfe7f3;
-		border-radius: 14px;
-		background: #fafcff;
-	}
-
-	.recommendation-group h3 {
-		margin-bottom: 0.8rem;
-	}
-
-	.empty-state {
-		display: inline-block;
-		padding: 0.8rem 1rem;
-		border-radius: 12px;
-		border: 1px dashed #cbd6e8;
-		color: #5b6f86;
-		background: #fafcff;
-	}
-
-	.muted {
-		color: #6d7f94;
-	}
-
-	@media (max-width: 920px) {
-		.layout {
-			grid-template-columns: 1fr;
-		}
-
-		.topbar {
-			flex-direction: column;
-			align-items: flex-start;
-		}
-	}
-
-	:global(body) {
-		background: #faf7fc;
-		color: #292630;
-		font-family: 'Segoe UI', sans-serif;
-	}
-
-	.page-shell {
-		max-width: 760px;
-		padding: 0.45rem 0 2rem;
-	}
-
-	.topbar {
-		justify-content: flex-start;
-		min-height: 1.5rem;
-		margin: 0 0 0.55rem;
 	}
 
 	.back-button {
@@ -1197,15 +666,22 @@
 		height: 1rem;
 	}
 
-	.layout {
-		display: block;
+	.status-banner {
+		margin-bottom: 1.25rem;
+		padding: 0.8rem 1rem;
+		border-radius: 10px;
+		border: 1px solid #dfe7f3;
+		font-weight: 600;
 	}
 
-	.panel {
-		border: 0;
-		border-radius: 0;
-		background: transparent;
-		box-shadow: none;
+	.status-banner.error {
+		background: #fff3f3;
+		color: #8b2e2e;
+	}
+
+	.patient-list-panel[hidden],
+	.patient-detail-panel[hidden] {
+		display: none;
 	}
 
 	.patient-detail-panel {
@@ -1214,16 +690,10 @@
 		padding: 0;
 	}
 
-	.patient-list-panel[hidden],
-	.patient-detail-panel[hidden] {
-		display: none;
-	}
-
-	.patient-list-panel {
-		padding: 0;
-	}
-
 	.panel-header {
+		display: flex;
+		flex-direction: column;
+		gap: 0.65rem;
 		margin-bottom: 0.75rem;
 	}
 
@@ -1238,13 +708,23 @@
 		color: #77717e;
 	}
 
-	.search-field input {
+	.search-field input,
+	.scope-card select {
+		width: 100%;
 		min-width: 0;
 		padding: 0;
 		border: 0;
-		outline: 0;
 		background: transparent;
 		font: inherit;
+	}
+
+	.search-field input {
+		outline: 0;
+	}
+
+	.scope-card select {
+		color: #28252d;
+		font-size: 0.85rem;
 	}
 
 	.search-field :global(svg) {
@@ -1254,14 +734,22 @@
 	}
 
 	.patient-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: grid;
 		gap: 0.5rem;
 	}
 
 	.patient-list button {
+		width: 100%;
+		text-align: left;
 		padding: 0.7rem 0.8rem;
 		border: 1px solid #e7e1eb;
 		border-radius: 7px;
 		background: #fff;
+		cursor: pointer;
+		transition: all 0.15s ease;
 	}
 
 	.patient-list button:hover,
@@ -1270,13 +758,27 @@
 		background: #f4eef9;
 	}
 
+	.patient-id {
+		font-size: 1.02rem;
+		font-weight: 700;
+	}
+
+	.patient-meta {
+		margin-top: 0.2rem;
+		color: #52657f;
+		font-size: 0.9rem;
+	}
+
 	.section-block {
 		margin-top: 0;
 		margin-bottom: 0.6rem;
 	}
 
 	.section-header {
+		display: flex;
 		align-items: center;
+		justify-content: space-between;
+		gap: 1rem;
 		margin-bottom: 0.45rem;
 	}
 
@@ -1284,6 +786,7 @@
 		display: flex;
 		align-items: center;
 		gap: 0.45rem;
+		margin: 0;
 		color: #292630;
 		font-size: 0.98rem;
 		font-weight: 500;
@@ -1296,6 +799,7 @@
 	}
 
 	.section-header p {
+		margin: 0;
 		color: #696472;
 		font-size: 0.72rem;
 		white-space: nowrap;
@@ -1332,31 +836,6 @@
 		color: #46414b;
 	}
 
-	.scope-card strong {
-		display: block;
-		overflow: hidden;
-		color: #28252d;
-		font-size: 0.95rem;
-		font-weight: 500;
-		text-overflow: ellipsis;
-		white-space: nowrap;
-	}
-
-	.scope-card select {
-		width: 100%;
-		min-width: 0;
-		padding: 0;
-		border: 0;
-		background: transparent;
-		color: #28252d;
-		font: inherit;
-		font-size: 0.85rem;
-	}
-
-	.period-card {
-		padding-right: 0.7rem;
-	}
-
 	.summary-grid {
 		display: grid;
 		grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1373,14 +852,6 @@
 		background: #fff;
 	}
 
-	.label {
-		margin-bottom: 0.15rem;
-		color: #625d68;
-		font-size: 0.7rem;
-		letter-spacing: 0;
-		text-transform: none;
-	}
-
 	.summary-card strong {
 		display: block;
 		overflow: hidden;
@@ -1388,6 +859,15 @@
 		font-weight: 500;
 		text-overflow: ellipsis;
 		white-space: nowrap;
+	}
+
+	.label {
+		display: block;
+		margin-bottom: 0.15rem;
+		color: #625d68;
+		font-size: 0.7rem;
+		letter-spacing: 0;
+		text-transform: none;
 	}
 
 	.data-details {
@@ -1468,17 +948,79 @@
 		font-size: 0.73rem;
 	}
 
+	.table-wrap {
+		overflow-x: auto;
+	}
+
+	table {
+		width: 100%;
+		border-collapse: collapse;
+		min-width: 760px;
+	}
+
+	th,
+	td {
+		padding: 0.75rem 0.7rem;
+		text-align: left;
+		border-bottom: 1px solid #e5ebf4;
+		vertical-align: top;
+	}
+
+	th {
+		text-transform: uppercase;
+		font-size: 0.76rem;
+		letter-spacing: 0.04em;
+		color: #4f647d;
+		background: #f7faff;
+	}
+
+	.isolate-line,
+	.iso-details {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.3rem 0.45rem;
+		align-items: center;
+		margin-bottom: 0.4rem;
+	}
+
+	.flag,
+	.susceptibility-pill {
+		display: inline-flex;
+		align-items: center;
+		padding: 0.22rem 0.53rem;
+		border-radius: 999px;
+		font-size: 0.74rem;
+		font-weight: 600;
+	}
+
+	.flag {
+		background: #edf3ff;
+		color: #1f4d99;
+	}
+
+	.susceptibility-pill {
+		margin: 0 0.3rem 0.35rem 0;
+		background: #edf3f8;
+		color: #213d5f;
+	}
+
+	.susceptibility-pill.s {
+		background: #eafaf2;
+		color: #166a42;
+	}
+
+	.susceptibility-pill.r {
+		background: #fff1f1;
+		color: #9a2f2f;
+	}
+
+	.muted {
+		color: #6d7f94;
+	}
+
 	.recommendations-section {
 		display: flex;
 		flex-direction: column;
-	}
-
-	.recommendation-group {
-		margin: 0;
-		padding: 0;
-		border: 0;
-		border-radius: 0;
-		background: transparent;
 	}
 
 	.recommendation-group + .recommendation-group {
@@ -1492,52 +1034,6 @@
 		color: #625d68;
 		font-size: 0.72rem;
 		font-weight: 500;
-	}
-
-	.excluded-list {
-		margin: 0.3rem 0 0 43%;
-		color: #655f6b;
-		font-size: 0.65rem;
-	}
-
-	.excluded-list > summary {
-		width: fit-content;
-		color: #5b3a86;
-		cursor: pointer;
-		list-style: none;
-	}
-
-	.excluded-list > summary::-webkit-details-marker {
-		display: none;
-	}
-
-	.excluded-list > summary::before {
-		margin-right: 0.3rem;
-		content: '⌄';
-	}
-
-	.excluded-list[open] > summary::before {
-		content: '⌃';
-	}
-
-	.excluded-list ul {
-		display: grid;
-		gap: 0.35rem;
-		padding: 0.45rem 0 0.2rem;
-		margin: 0;
-		list-style: none;
-	}
-
-	.excluded-list li {
-		display: grid;
-		gap: 0.1rem;
-		padding-top: 0.25rem;
-		border-top: 1px solid #e5dfe9;
-	}
-
-	.excluded-list li small {
-		color: #77717e;
-		font-size: 0.6rem;
 	}
 
 	.recommendation-group .table-wrap {
@@ -1638,9 +1134,66 @@
 	}
 
 	.empty-state {
+		display: inline-block;
 		padding: 0.6rem 0.7rem;
+		border: 1px dashed #cbd6e8;
 		border-radius: 6px;
+		color: #5b6f86;
+		background: #fafcff;
 		font-size: 0.8rem;
+	}
+
+	.excluded-list {
+		margin: 0.3rem 0 0 43%;
+		color: #655f6b;
+		font-size: 0.65rem;
+	}
+
+	.excluded-list > summary {
+		width: fit-content;
+		color: #5b3a86;
+		cursor: pointer;
+		list-style: none;
+	}
+
+	.excluded-list > summary::-webkit-details-marker {
+		display: none;
+	}
+
+	.excluded-list > summary::before {
+		margin-right: 0.3rem;
+		content: '⌄';
+	}
+
+	.excluded-list[open] > summary::before {
+		content: '⌃';
+	}
+
+	.excluded-list ul {
+		display: grid;
+		gap: 0.35rem;
+		padding: 0.45rem 0 0.2rem;
+		margin: 0;
+		list-style: none;
+	}
+
+	.excluded-list li {
+		display: grid;
+		gap: 0.1rem;
+		padding-top: 0.25rem;
+		border-top: 1px solid #e5dfe9;
+	}
+
+	.excluded-list li small {
+		color: #77717e;
+		font-size: 0.6rem;
+	}
+
+	@media (max-width: 920px) {
+		.topbar {
+			flex-direction: column;
+			align-items: flex-start;
+		}
 	}
 
 	@media (max-width: 420px) {

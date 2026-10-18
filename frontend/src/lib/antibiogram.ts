@@ -1,5 +1,6 @@
 // Response shape of GET /antibiogram (server/src/resistance/api/responses.py).
 
+import { fetchJson } from './api.js';
 import type { TrafficLight } from './trafficlight.js';
 
 export interface AntibioticCell {
@@ -50,11 +51,5 @@ export async function fetchAntibiogram(
 	if (filters.period) params.set('period', filters.period);
 	if (filters.organism) params.set('organism', filters.organism);
 	if (filters.specimen) params.set('specimen', filters.specimen);
-
-	const response = await fetch(`/api/antibiogram?${params}`, { signal });
-	if (!response.ok) {
-		const body = await response.json().catch(() => null);
-		throw new Error(body?.detail ?? `HTTP ${response.status}`);
-	}
-	return response.json();
+	return fetchJson<AntibiogramResponse>(`/antibiogram?${params}`, signal);
 }
