@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { page } from "$app/state";
-	import favicon from "#lib/assets/favicon.svg";
-	import type { LayoutProps } from "./$types";
+	import { page } from '$app/state';
+	import favicon from '#lib/assets/favicon.svg';
+	import type { LayoutProps } from './$types';
 
 	let { children }: LayoutProps = $props();
 </script>
@@ -15,17 +15,13 @@
 	<nav aria-label="Main navigation">
 		<a
 			href="/antibiogram"
-			aria-current={page.url.pathname.startsWith("/antibiogram")
-				? "page"
-				: undefined}
+			aria-current={page.url.pathname.startsWith('/antibiogram') ? 'page' : undefined}
 		>
 			Antibiogram
 		</a>
 		<a
 			href="/patients"
-			aria-current={page.url.pathname.startsWith("/patients")
-				? "page"
-				: undefined}
+			aria-current={page.url.pathname.startsWith('/patients') ? 'page' : undefined}
 		>
 			Patients
 		</a>
@@ -39,6 +35,7 @@
 <style>
 	.container {
 		margin: 0 3rem;
+		padding: 1rem;
 	}
 	.app-header {
 		display: flex;
@@ -75,7 +72,7 @@
 	}
 
 	nav a:hover,
-	nav a[aria-current="page"] {
+	nav a[aria-current='page'] {
 		border-bottom-color: #123b7a;
 		color: #123b7a;
 	}
@@ -87,6 +84,10 @@
 	}
 
 	@media (max-width: 480px) {
+		.container {
+			margin: 0;
+		}
+
 		.app-header {
 			gap: 0.5rem;
 			padding: 0 0.75rem;
@@ -98,6 +99,22 @@
 
 		nav a {
 			padding: 0 0.55rem;
+		}
+	}
+
+	@media (max-width: 360px) {
+		.app-header {
+			gap: 0.25rem;
+			padding: 0 0.5rem;
+		}
+
+		.brand {
+			font-size: 0.75rem;
+		}
+
+		nav a {
+			padding: 0 0.35rem;
+			font-size: 0.875rem;
 		}
 	}
 </style>
