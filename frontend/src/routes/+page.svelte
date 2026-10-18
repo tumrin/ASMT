@@ -6,14 +6,14 @@
 	<p class="subheading">Antimicrobial Susceptibility Monitoring Tool</p>
 
 	<div class="buttons">
-		<a href="/patient">
+		<a href="/patients">
 			<img src="/qrscan.svg" alt="" />
 
 			<h2>Scan patient tag</h2>
 			<p>Patent-specific recommendations</p>
 		</a>
 
-		<a href="/patient">
+		<a href="/patients">
 			<img src="/dropdown.svg" alt="" />
 
 			<h2>Select details</h2>
