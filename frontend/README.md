@@ -103,7 +103,7 @@ src/
     assets/favicon.svg
   routes/
     +layout.svelte    sets the favicon, renders children
-    +page.svelte      SvelteKit welcome placeholder
+    +page.svelte      root page metadata; +page.server.ts redirects to /antibiogram
 static/
   robots.txt
 ```
@@ -162,10 +162,7 @@ The Views section describes the finished product. Implemented so far: a basic
 antibiogram page at `/antibiogram` with organism, specimen, ward and region filters
 (the ward and region options come from `GET /metadata`; the two scopes are mutually
 exclusive) and period filters. Display names for organisms, specimens and wards are
-hardcoded in `src/lib/`. Not implemented yet:
 
-- Recommendations and patient views; `routes/+page.svelte` is still the SvelteKit
-  welcome placeholder.
 - API client: only `GET /antibiogram` (`src/lib/antibiogram.ts`) is implemented.
 - PDF export: the antibiogram uses the browser's print dialog, including the active
   filters; patient-view export is not implemented.
